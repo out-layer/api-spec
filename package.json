@@ -5,11 +5,14 @@
   "license": "MIT",
   "private": true,
   "files": [
-    "openapi.yaml"
+    "openapi.yaml",
+    "openapi.json"
   ],
   "scripts": {
     "lint": "redocly lint openapi.yaml",
     "bundle": "redocly bundle openapi.yaml -o dist/openapi.json --ext json",
+    "build": "redocly bundle openapi.yaml -o openapi.json --ext json",
+    "check:bundle": "npm run build && git diff --exit-code openapi.json",
     "preview": "redocly preview-docs openapi.yaml",
     "types": "openapi-typescript openapi.yaml -o dist/types.ts"
   },
