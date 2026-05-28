@@ -4,6 +4,42 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+### Added
+
+- `WithdrawResult` schema — typed result payload for a successful `withdraw`
+  request. Documents `intent_hash` and `delivered` fields previously emitted
+  unrecorded by the coordinator. Returned in `result` of
+  `GET /wallet/v1/requests/{id}` and in the `result` of the
+  `request_completed` webhook for withdraw requests.
+- `delivered` documented as `"native_near"` or `"nep141:<contract>"` — see
+  issue
+  [fastnear/near-outlayer#25](https://github.com/fastnear/near-outlayer/issues/25)
+  for the bug this resolves (the coordinator used to emit `"wnear"` for every
+  NEP-141 transfer, including USDC, regardless of the actual on-chain effect).
+
+### Changed
+
+- `RequestStatusResponse.result` is now `anyOf [WithdrawResult, null, object]`
+  with a description tying the shape to `type`. Non-breaking — existing
+  clients that treated `result` as opaque continue to work; clients consuming
+  `result.delivered` for `type = "withdraw"` now have a typed reference to
+  validate against.
+
+### Behavior
+
+- **Multisig-approved withdraws now run the same pre-checks as the
+  synchronous path** (recipient storage / balance / account-existence).
+  Approved withdraws to a non-existent named NEAR account now fail with
+  `status = "failed"` instead of silently burning the source funds. Visible
+  to integrators consuming `request_completed` webhooks or polling
+  `GET /wallet/v1/requests/{id}`.
+- **Approval-path multisig withdraws are now explicitly NEAR-only.** A
+  pending approval whose `request_data.chain` is anything other than
+  `"near"` (a row that should not exist in a correct deployment, but could
+  arise from old DB migrations) now resolves to `status = "failed"` with a
+  clear error. Cross-chain multisig withdrawals were never wired up, so
+  this surfaces a pre-existing limitation rather than introducing one.
+
 ## [0.1.0-alpha.1] — 2026-05-20
 
 Initial public draft. Covers the wallet API surface.

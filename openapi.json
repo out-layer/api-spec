@@ -2590,11 +2590,19 @@
             "$ref": "#/components/schemas/RequestStatus"
           },
           "result": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "additionalProperties": {}
+            "description": "Operation-specific result payload, present once `status` is\n`success` (otherwise `null` or an `{ \"error\": \"<reason>\" }` object\non `failed`). The shape depends on `type`:\n\n- `type = \"withdraw\"` — conforms to\n  [`WithdrawResult`](#/components/schemas/WithdrawResult).\n- Other request types are not yet schema-documented; treat the\n  object as opaque until added in a later spec release.\n\nUses `anyOf` (not `oneOf`) deliberately — `WithdrawResult` is also\na valid `object`, and `oneOf` would require exactly one match,\nso a successful withdraw would fail strict validators.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WithdrawResult"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": {}
+              }
+            ]
           },
           "created_at": {
             "type": "string",
@@ -2606,6 +2614,35 @@
               "null"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "WithdrawResult": {
+        "type": "object",
+        "description": "Result payload for a successful `withdraw` request — what the\nrecipient actually received on-chain. Emitted in the `result` field of\n`GET /wallet/v1/requests/{id}` and in the `result` field of the\n`request_completed` webhook for withdraw requests.",
+        "required": [
+          "intent_hash",
+          "delivered"
+        ],
+        "properties": {
+          "intent_hash": {
+            "type": "string",
+            "description": "Base58-encoded NEAR Intents hash returned by `solver-relay`.\nEmpty string if the relay did not return one — the field is\nalways present so clients can index it without `Option` handling.",
+            "example": "4GArqMi1WJwsw7p4tWHAbYG2Se5Wp6YSb8Ab3C8cUTJg"
+          },
+          "delivered": {
+            "description": "Canonical identifier of the asset the recipient received on-chain.\nFormat mirrors the request `token` field of\n`POST /wallet/v1/intents/withdraw`, so clients can compare request\nvs. response directly:\n\n- `\"native_near\"` — the wallet emitted a `native_withdraw` intent\n  that unwrapped wNEAR and sent native NEAR. The recipient\n  received native NEAR regardless of what the request `token`\n  field named (`\"\"`, `\"near\"`, or `\"native\"`).\n- `\"nep141:<contract>\"` — the wallet emitted a NEP-141 `transfer`\n  intent. The recipient received that token, including wNEAR\n  (`\"nep141:wrap.near\"`), USDC, USDT, etc.\n\nNever returned: the legacy short symbol `\"wnear\"` (was emitted\nin error by coordinator versions prior to the\n`WithdrawResult`-typed response — see api-spec CHANGELOG).",
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "native_near"
+              },
+              {
+                "type": "string",
+                "pattern": "^nep141:.+",
+                "example": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1"
+              }
+            ]
           }
         }
       },
