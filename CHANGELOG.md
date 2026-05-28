@@ -24,6 +24,12 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
   per-chain address format (NEAR 64-char hex, EVM `0x`+40 hex, Solana
   base58, Bitcoin `bc1…`/`1…`/`3…`) so clients can validate the address
   format client-side before initiating a transfer.
+- `DepositIntentResponse.hint` (optional string) — non-binding advisory
+  when the coordinator can suggest a more direct endpoint for the same
+  logical operation. Currently emitted only for NEAR-source deposits to
+  point clients at `POST /wallet/v1/intents/deposit` (one-tx
+  `ft_transfer_call`, no 1Click solver hop). Backward-compatible —
+  existing clients that don't read the field are unaffected.
 
 ### Changed
 
@@ -68,9 +74,6 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
   rejected with HTTP 400). Schema unchanged for the legacy shape; only
   observable response values changed. Fixes
   [fastnear/near-outlayer#25 Issue A](https://github.com/fastnear/near-outlayer/issues/25).
-
-### Behavior
-
 - **Multisig-approved withdraws now run the same pre-checks as the
   synchronous path** (recipient storage / balance / account-existence).
   Approved withdraws to a non-existent named NEAR account now fail with
@@ -83,6 +86,31 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
   arise from old DB migrations) now resolves to `status = "failed"` with a
   clear error. Cross-chain multisig withdrawals were never wired up, so
   this surfaces a pre-existing limitation rather than introducing one.
+- **Coordinator no longer auto-issues `storage_deposit` on `intents.near`
+  or on the OutLayer contract.**
+  - `/wallet/v1/intents/deposit` previously attempted a NEP-145
+    `storage_deposit` on `intents.near` before the `ft_transfer_call`.
+    intents.near uses NEP-245 multi-token storage and auto-registers
+    callers via its own `ft_on_transfer` hook — the NEP-145 call was
+    always failing on-chain and wasting ~0.00125 NEAR per request. The
+    call is now omitted entirely; the actual deposit still works because
+    of the auto-registration on first transfer.
+  - `createPaymentKey` previously attempted a `storage_deposit` on the
+    OutLayer contract (`state.contract_id`) for `owner`. The OutLayer
+    contract creates the owner's storage entry in its `store_secrets`
+    call (which still runs earlier in the flow), so the extra
+    `storage_deposit` was a duplicate / no-op that often failed
+    on-chain.
+  - **`createPaymentKey` retains the auto-`storage_deposit` on the
+    stablecoin (USDC) contract** for the integrator's convenience — that
+    one is a standard NEP-141 registration paid for from the integrator's
+    own wallet NEAR, and is idempotent.
+- **Coordinator now structured-logs every keystore-call failure** with a
+  `WARN` line carrying status code + body (for non-2xx) or transport
+  error detail. Operators who tail coordinator logs will see actionable
+  diagnostics for every `502 keystore_error` response (previously the
+  causes were silently swallowed and only the response code was visible
+  via `tower_http`). Not directly observable to integrators.
 
 ## [0.1.0-alpha.1] — 2026-05-20
 

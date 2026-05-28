@@ -1583,6 +1583,17 @@ components:
           description: |-
             Solver's estimate of bridge settlement time, in seconds. Absent
             if 1Click did not return an estimate.
+        hint:
+          type: string
+          description: |-
+            Non-binding advisory when a faster / cheaper endpoint exists
+            for the same logical operation. Present only when the resolved
+            source chain is `near` — in that case the caller's funds are
+            already on NEAR and `POST /wallet/v1/intents/deposit` would do
+            the deposit in one direct `ft_transfer_call` without the
+            1Click solver hop. Clients that don't read this field are
+            unaffected; clients that prefer the most direct path can
+            switch endpoints on receiving it.
 
     DepositStatusResponse:
       type: object

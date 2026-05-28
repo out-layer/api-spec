@@ -2116,6 +2116,10 @@
           "estimated_time_secs": {
             "type": "integer",
             "description": "Solver's estimate of bridge settlement time, in seconds. Absent\nif 1Click did not return an estimate."
+          },
+          "hint": {
+            "type": "string",
+            "description": "Non-binding advisory when a faster / cheaper endpoint exists\nfor the same logical operation. Present only when the resolved\nsource chain is `near` — in that case the caller's funds are\nalready on NEAR and `POST /wallet/v1/intents/deposit` would do\nthe deposit in one direct `ft_transfer_call` without the\n1Click solver hop. Clients that don't read this field are\nunaffected; clients that prefer the most direct path can\nswitch endpoints on receiving it."
           }
         }
       },
