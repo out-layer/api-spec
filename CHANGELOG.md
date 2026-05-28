@@ -27,6 +27,16 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Changed
 
+- `TransferRequest.to` is now the canonical recipient field. The legacy
+  field name `receiver_id` is retained as a deprecated alias — existing
+  clients sending `receiver_id` continue to work, new clients should use
+  `to` to match `WithdrawRequest.to` and the dashboard. Sending both
+  fields in the same body is rejected with a 400 (`duplicate field`
+  deserialization error). This closes the API inconsistency where
+  `/wallet/v1/transfer` required `receiver_id` while
+  `/wallet/v1/intents/withdraw` required `to` — a foot-gun discovered
+  during e2e sweep where a client using `to` for both got a confusing
+  `missing field receiver_id` 400 on transfer.
 - `RequestStatusResponse.result` is now `anyOf [WithdrawResult, null, object]`
   with a description tying the shape to `type`. Non-breaking — existing
   clients that treated `result` as opaque continue to work; clients consuming

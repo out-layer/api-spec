@@ -283,10 +283,19 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/TransferRequest'
-            example:
-              chain: near
-              receiver_id: bob.near
-              amount: '1000000000000000000000000'
+            examples:
+              canonical:
+                summary: Canonical `to` field
+                value:
+                  chain: near
+                  to: bob.near
+                  amount: '1000000000000000000000000'
+              legacyReceiverId:
+                summary: Legacy `receiver_id` alias (still accepted)
+                value:
+                  chain: near
+                  receiver_id: bob.near
+                  amount: '1000000000000000000000000'
       responses:
         '200':
           description: Transfer submitted
@@ -1284,16 +1293,36 @@ components:
 
     TransferRequest:
       type: object
-      required: [receiver_id, amount]
+      description: |-
+        Native transfer on a single chain. Canonical recipient field is
+        `to` — matches `WithdrawRequest.to` and the dashboard. The legacy
+        field name `receiver_id` is still accepted as an alias for
+        backward compatibility with clients that predate the rename;
+        sending BOTH in the same body is rejected as a deserialization
+        error.
+      required: [to, amount]
       properties:
         chain:
           allOf:
             - $ref: '#/components/schemas/Chain'
           description: Chain to transfer on. Defaults to `near` server-side.
+        to:
+          type: string
+          description: |-
+            Recipient account id on `chain`. For NEAR, accepts both named
+            accounts (`alice.near`) and 64-char implicit hex accounts.
+          example: alice.near
         receiver_id:
           type: string
+          deprecated: true
+          description: |-
+            **Deprecated alias for `to`.** Existing clients sending
+            `receiver_id` continue to work; new clients should use `to`.
+            Sending both `to` and `receiver_id` in the same body is
+            rejected with a 400.
         amount:
           type: string
+          description: Amount in the chain's smallest unit (yoctoNEAR, wei, …).
 
     IntentsDepositRequest:
       type: object

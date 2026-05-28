@@ -359,10 +359,23 @@
               "schema": {
                 "$ref": "#/components/schemas/TransferRequest"
               },
-              "example": {
-                "chain": "near",
-                "receiver_id": "bob.near",
-                "amount": "1000000000000000000000000"
+              "examples": {
+                "canonical": {
+                  "summary": "Canonical `to` field",
+                  "value": {
+                    "chain": "near",
+                    "to": "bob.near",
+                    "amount": "1000000000000000000000000"
+                  }
+                },
+                "legacyReceiverId": {
+                  "summary": "Legacy `receiver_id` alias (still accepted)",
+                  "value": {
+                    "chain": "near",
+                    "receiver_id": "bob.near",
+                    "amount": "1000000000000000000000000"
+                  }
+                }
               }
             }
           }
@@ -1759,8 +1772,9 @@
       },
       "TransferRequest": {
         "type": "object",
+        "description": "Native transfer on a single chain. Canonical recipient field is\n`to` — matches `WithdrawRequest.to` and the dashboard. The legacy\nfield name `receiver_id` is still accepted as an alias for\nbackward compatibility with clients that predate the rename;\nsending BOTH in the same body is rejected as a deserialization\nerror.",
         "required": [
-          "receiver_id",
+          "to",
           "amount"
         ],
         "properties": {
@@ -1772,11 +1786,19 @@
             ],
             "description": "Chain to transfer on. Defaults to `near` server-side."
           },
+          "to": {
+            "type": "string",
+            "description": "Recipient account id on `chain`. For NEAR, accepts both named\naccounts (`alice.near`) and 64-char implicit hex accounts.",
+            "example": "alice.near"
+          },
           "receiver_id": {
-            "type": "string"
+            "type": "string",
+            "deprecated": true,
+            "description": "**Deprecated alias for `to`.** Existing clients sending\n`receiver_id` continue to work; new clients should use `to`.\nSending both `to` and `receiver_id` in the same body is\nrejected with a 400."
           },
           "amount": {
-            "type": "string"
+            "type": "string",
+            "description": "Amount in the chain's smallest unit (yoctoNEAR, wei, …)."
           }
         }
       },
