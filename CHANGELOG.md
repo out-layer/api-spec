@@ -16,6 +16,14 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
   [fastnear/near-outlayer#25](https://github.com/fastnear/near-outlayer/issues/25)
   for the bug this resolves (the coordinator used to emit `"wnear"` for every
   NEP-141 transfer, including USDC, regardless of the actual on-chain effect).
+- `DepositIntentRequest.BySourceAsset` branch — request body now formally
+  accepts `{ source_asset, destination_asset?, amount }` in addition to the
+  legacy `{ chain, token, amount }` shape; both shapes are modelled as
+  `anyOf` branches.
+- `DepositIntentResponse.deposit_address` description now enumerates the
+  per-chain address format (NEAR 64-char hex, EVM `0x`+40 hex, Solana
+  base58, Bitcoin `bc1…`/`1…`/`3…`) so clients can validate the address
+  format client-side before initiating a transfer.
 
 ### Changed
 
@@ -24,6 +32,32 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
   clients that treated `result` as opaque continue to work; clients consuming
   `result.delivered` for `type = "withdraw"` now have a typed reference to
   validate against.
+- `DepositIntentRequest` is now an `anyOf` of two object shapes
+  (`BySourceAsset`, `ByChainAndToken`) rather than a single object with
+  `[chain, amount, token]` required. The legacy `[chain, amount, token]`
+  combination still validates against the `ByChainAndToken` branch
+  (`token` is now optional with a default of `"USDC"`, matching the
+  coordinator behavior — clients sending `token` continue to work).
+- `DepositIntentResponse.expires_at` and `.estimated_time_secs` are no
+  longer in `required`. The coordinator omits these fields when 1Click does
+  not return them, which the previous schema marked as a spec violation
+  (clients that strictly validated `required` rejected valid responses).
+- `DefuseAssetId` and `DestinationAsset` schemas added and used by
+  `DepositIntentRequest` so the `destination_asset` default isn't
+  duplicated across the two `anyOf` branches.
+
+### Behavior
+
+- **`createDepositIntent` now returns a chain-appropriate `deposit_address`
+  for every source chain.** Previously the coordinator silently ignored
+  the (undocumented but accepted) `source_asset` request field and
+  defaulted `chain` to `"solana"`, so every cross-chain origin returned a
+  Solana base58 address — a **lose-funds risk** for EVM/Bitcoin/NEAR
+  callers who would send tokens to an address on the wrong chain. The
+  legacy `{ chain, token }` shape also now accepts `chain="near"` (was
+  rejected with HTTP 400). Schema unchanged for the legacy shape; only
+  observable response values changed. Fixes
+  [fastnear/near-outlayer#25 Issue A](https://github.com/fastnear/near-outlayer/issues/25).
 
 ### Behavior
 

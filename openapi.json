@@ -668,7 +668,7 @@
         ],
         "operationId": "createDepositIntent",
         "summary": "Create a cross-chain deposit intent (1Click)",
-        "description": "Requests a one-time deposit address on a source chain via NEAR Intents\n1Click. The caller sends `amount` of `token` to the returned\n`deposit_address` on `chain`; the solver bridges it and credits the\nwallet's intents.near balance. Poll `getDepositStatus` until `success`.\n\nAmounts are in the token's smallest unit. There's a small bridge fee,\nso `amount_out` < `amount`.\n",
+        "description": "Requests a one-time deposit address on a source chain via NEAR Intents\n1Click. The caller sends `amount` of the source token to the returned\n`deposit_address`; the solver bridges it and credits the wallet's\nintents.near balance. Poll `getDepositStatus` until `success`.\n\nTwo request shapes are accepted (see\n[`DepositIntentRequest`](#/components/schemas/DepositIntentRequest)):\n\n- **By asset id (preferred)** — `{ source_asset, destination_asset?,\n  amount }`. The source chain is derived from the\n  [`defuse_asset_id`](#/components/schemas/TokenInfo) prefix. This is\n  the shape returned by `listTokens` and used by the dashboard.\n- **By chain + symbol (legacy)** — `{ chain, token?, amount }`. The\n  coordinator resolves `(chain, symbol)` to an asset id via the\n  1Click token catalog.\n\nIf both shapes are present and disagree, `source_asset` wins and the\ncoordinator logs a warning. `near` is a valid source chain — a\nNEAR-origin deposit returns a 64-char hex implicit account.\n\nAmounts are in the token's smallest unit. There's a small bridge fee,\nso `amount_out` < `amount`.\n\nThe returned `deposit_address` is chain-specific — see the\n[`DepositIntentResponse.deposit_address`](#/components/schemas/DepositIntentResponse)\ndescription for per-chain address formats.\n",
         "requestBody": {
           "required": true,
           "content": {
@@ -676,10 +676,30 @@
               "schema": {
                 "$ref": "#/components/schemas/DepositIntentRequest"
               },
-              "example": {
-                "chain": "ethereum",
-                "amount": "5000000",
-                "token": "USDC"
+              "examples": {
+                "bySourceAsset": {
+                  "summary": "USDC on Base → NEAR USDC (preferred shape)",
+                  "value": {
+                    "source_asset": "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+                    "destination_asset": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+                    "amount": "5000000"
+                  }
+                },
+                "byChainAndToken": {
+                  "summary": "USDC on Ethereum (legacy shape)",
+                  "value": {
+                    "chain": "ethereum",
+                    "token": "USDC",
+                    "amount": "5000000"
+                  }
+                },
+                "nearNative": {
+                  "summary": "NEAR-origin deposit (returns a NEAR implicit account)",
+                  "value": {
+                    "source_asset": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+                    "amount": "5000000"
+                  }
+                }
               }
             }
           }
@@ -1959,27 +1979,85 @@
           }
         }
       },
-      "DepositIntentRequest": {
-        "type": "object",
-        "required": [
-          "chain",
-          "amount",
-          "token"
-        ],
-        "properties": {
-          "chain": {
-            "type": "string",
-            "description": "Source chain to bridge from. Common values: `ethereum`, `solana`,\n`base`, `arbitrum`, `polygon`, `optimism`, `avalanche`.\n"
-          },
-          "amount": {
-            "type": "string",
-            "description": "Amount in the token's smallest unit (e.g. `5000000` = 5 USDC)."
-          },
-          "token": {
-            "type": "string",
-            "description": "Token symbol to deposit, e.g. `USDC`."
+      "DefuseAssetId": {
+        "type": "string",
+        "description": "NEAR Intents `defuse_asset_id`. Currently always a NEP-141 token\nidentifier of the form `nep141:<contract>`. Format matches the\n[`TokenInfo.defuse_asset_id`](#/components/schemas/TokenInfo) field\nreturned by `listTokens`.",
+        "example": "nep141:wrap.near"
+      },
+      "DestinationAsset": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DefuseAssetId"
           }
-        }
+        ],
+        "description": "Defuse asset id the recipient will hold after the bridge. Defaults\nto NEAR USDC.",
+        "default": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1"
+      },
+      "DepositIntentRequest": {
+        "description": "Request body for `createDepositIntent`. Two shapes accepted; see the\n`anyOf` branches below. `amount` is always required. The\n`destination_asset` field defaults to NEAR USDC\n(`nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1`)\nwhen omitted — see\n[`DestinationAsset`](#/components/schemas/DestinationAsset).\n\nUses `anyOf` (not `oneOf`) deliberately — a request that supplies\nboth `source_asset` and `chain` matches both branches; the\ncoordinator resolves the conflict by preferring `source_asset` and\nlogging a warning, so `oneOf`'s strict \"exactly one match\" rule\nwould needlessly reject valid requests.",
+        "anyOf": [
+          {
+            "title": "BySourceAsset",
+            "description": "Preferred shape. The source chain is derived from the\n`source_asset` prefix (e.g. `nep141:eth-…` → ethereum,\n`nep141:base-…` → base, `nep141:btc.omft.near` → bitcoin,\nanything else `nep141:<contract>.near` → near).",
+            "type": "object",
+            "required": [
+              "source_asset",
+              "amount"
+            ],
+            "properties": {
+              "source_asset": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/DefuseAssetId"
+                  }
+                ],
+                "description": "NEAR Intents `defuse_asset_id` of the source token. The\nsource chain is derived from this id.",
+                "example": "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near"
+              },
+              "destination_asset": {
+                "$ref": "#/components/schemas/DestinationAsset"
+              },
+              "amount": {
+                "type": "string",
+                "description": "Amount in the source token's smallest unit (e.g. `5000000` = 5 USDC)."
+              },
+              "refund_address": {
+                "type": "string",
+                "description": "Address on the source chain to refund to if the bridge\nfails. Defaults to the wallet's derived address on that\nchain."
+              }
+            }
+          },
+          {
+            "title": "ByChainAndToken",
+            "description": "Legacy shape — kept for backwards compatibility. The coordinator\nresolves `(chain, token)` to a `source_asset` via the 1Click\ntoken catalog.",
+            "type": "object",
+            "required": [
+              "chain",
+              "amount"
+            ],
+            "properties": {
+              "chain": {
+                "type": "string",
+                "description": "Source chain. Supported: `near`, `ethereum`, `base`,\n`arbitrum`, `solana`, `bitcoin`, `bsc`, `polygon`,\n`optimism`, `avalanche`.",
+                "example": "ethereum"
+              },
+              "token": {
+                "type": "string",
+                "description": "Source token symbol on the origin chain. Defaults to `USDC`.",
+                "default": "USDC"
+              },
+              "destination_asset": {
+                "$ref": "#/components/schemas/DestinationAsset"
+              },
+              "amount": {
+                "type": "string"
+              },
+              "refund_address": {
+                "type": "string"
+              }
+            }
+          }
+        ]
       },
       "DepositIntentResponse": {
         "type": "object",
@@ -1988,9 +2066,7 @@
           "deposit_address",
           "amount",
           "amount_out",
-          "min_amount_out",
-          "expires_at",
-          "estimated_time_secs"
+          "min_amount_out"
         ],
         "properties": {
           "intent_id": {
@@ -1998,7 +2074,7 @@
           },
           "deposit_address": {
             "type": "string",
-            "description": "One-time address on the source chain — send funds here."
+            "description": "One-time address on the source chain — send funds here. The\naddress format depends on the resolved source chain:\n\n- `near` — 64-char hex (NEAR implicit account), e.g.\n  `f51768dc0c4d4bbb78890262da9882dee2ee5b6c2fcf2c527e56c6eadcb54353`\n- `ethereum` / `base` / `arbitrum` / `bsc` / `polygon` /\n  `optimism` / `avalanche` — `0x` + 40 hex (EVM), e.g.\n  `0x582290c0b2Cb60989B35FFF66049f3e3247355bc`\n- `solana` — base58, 32-44 chars (Solana), e.g.\n  `5AmGa2Bcfajbytg55UUb4vCAAzKBMYKZNQwx5S2BH2qf`\n- `bitcoin` — `bc1…` (segwit) or `1…` / `3…` (legacy)\n\nSending tokens to an address whose format doesn't match the\nsource chain will lose the funds — always verify the format\nclient-side before initiating the transfer."
           },
           "amount": {
             "type": "string"
@@ -2012,10 +2088,12 @@
           },
           "expires_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Deadline after which the deposit address is no longer\nguaranteed to be honored by 1Click. Absent if 1Click did not\nreturn a deadline."
           },
           "estimated_time_secs": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Solver's estimate of bridge settlement time, in seconds. Absent\nif 1Click did not return an estimate."
           }
         }
       },
