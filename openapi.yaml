@@ -637,10 +637,13 @@ paths:
         never appears on chain — only the destination-chain receiver does, on the
         destination chain.
 
-        `chain="near"` is **rejected** (400): to move funds back to your own
-        public intents balance use `confidentialUnshield`; to deliver native
-        NEAR to a named account, unshield then `POST /wallet/v1/intents/withdraw`
-        with `token=near`.
+        `chain="near"` is supported and delivers **native NEAR** to the named
+        NEAR account: 1Click runs a `native_withdraw` intent on `intents.near`
+        that unwraps the wNEAR and sends native NEAR directly to the recipient's
+        wallet (verified live: settlement
+        `FVzan8XRMwHYPe2hgX4GffwG3bdndxETWb2FKVFzFdur`). To send funds back to
+        your **own** public intents balance use `confidentialUnshield` (different
+        semantics — self vs. external recipient).
 
         `token` is **required** — the source confidential asset to deliver on the
         destination chain. The same per-chain whitelist / spending-limit policy
@@ -2462,9 +2465,11 @@ components:
         - $ref: '#/components/schemas/IntentsDepositRequest'
     ConfidentialWithdrawRequest:
       description: >-
-        Confidential withdraw body — same shape as `WithdrawRequest`, but
-        `chain="near"` is rejected (use `confidentialUnshield`) and `token` is
-        required.
+        Confidential withdraw body — same shape as `WithdrawRequest`; `token`
+        is required (the source confidential asset to deliver). `chain="near"`
+        is supported and delivers native NEAR via `intents.near native_withdraw`
+        (use `confidentialUnshield` if you want to send to your own public
+        balance instead).
       allOf:
         - $ref: '#/components/schemas/WithdrawRequest'
     ConfidentialSwapRequest:

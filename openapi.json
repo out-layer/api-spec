@@ -807,7 +807,7 @@
         ],
         "operationId": "confidentialWithdraw",
         "summary": "Withdraw a confidential balance to an external chain",
-        "description": "Moves a confidential balance out to a destination chain\n(`CONFIDENTIAL_INTENTS` → `DESTINATION_CHAIN`). The wallet's NEAR address\nnever appears on chain — only the destination-chain receiver does, on the\ndestination chain.\n\n`chain=\"near\"` is **rejected** (400): to move funds back to your own\npublic intents balance use `confidentialUnshield`; to deliver native\nNEAR to a named account, unshield then `POST /wallet/v1/intents/withdraw`\nwith `token=near`.\n\n`token` is **required** — the source confidential asset to deliver on the\ndestination chain. The same per-chain whitelist / spending-limit policy\nas `intentsWithdraw` is enforced. Async — poll\n`GET /wallet/v1/requests/{id}`.\n\n**Delivery to a NEAR named account via `DESTINATION_CHAIN` lands an\n`mt_balance` credit on `intents.near` (NEP-245), not a direct FT\nbalance** — see CUSTODY docs.\n",
+        "description": "Moves a confidential balance out to a destination chain\n(`CONFIDENTIAL_INTENTS` → `DESTINATION_CHAIN`). The wallet's NEAR address\nnever appears on chain — only the destination-chain receiver does, on the\ndestination chain.\n\n`chain=\"near\"` is supported and delivers **native NEAR** to the named\nNEAR account: 1Click runs a `native_withdraw` intent on `intents.near`\nthat unwraps the wNEAR and sends native NEAR directly to the recipient's\nwallet (verified live: settlement\n`FVzan8XRMwHYPe2hgX4GffwG3bdndxETWb2FKVFzFdur`). To send funds back to\nyour **own** public intents balance use `confidentialUnshield` (different\nsemantics — self vs. external recipient).\n\n`token` is **required** — the source confidential asset to deliver on the\ndestination chain. The same per-chain whitelist / spending-limit policy\nas `intentsWithdraw` is enforced. Async — poll\n`GET /wallet/v1/requests/{id}`.\n\n**Delivery to a NEAR named account via `DESTINATION_CHAIN` lands an\n`mt_balance` credit on `intents.near` (NEP-245), not a direct FT\nbalance** — see CUSTODY docs.\n",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -3338,7 +3338,7 @@
         ]
       },
       "ConfidentialWithdrawRequest": {
-        "description": "Confidential withdraw body — same shape as `WithdrawRequest`, but `chain=\"near\"` is rejected (use `confidentialUnshield`) and `token` is required.",
+        "description": "Confidential withdraw body — same shape as `WithdrawRequest`; `token` is required (the source confidential asset to deliver). `chain=\"near\"` is supported and delivers native NEAR via `intents.near native_withdraw` (use `confidentialUnshield` if you want to send to your own public balance instead).",
         "allOf": [
           {
             "$ref": "#/components/schemas/WithdrawRequest"
