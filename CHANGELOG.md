@@ -27,7 +27,7 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
   SHIELD/UNSHIELD and cross-chain in/out are the only edges that touch the
   public chain) are documented in the route descriptions and CUSTODY docs —
   see the agent integration guide
-  [`docs/CONFIDENTIAL_INTENTS.md`](https://github.com/out-layer/outlayer-coordinator/blob/main/docs/CONFIDENTIAL_INTENTS.md)
+  [`docs/CONFIDENTIAL_INTENTS.md`](https://github.com/out-layer/coordinator/blob/main/docs/CONFIDENTIAL_INTENTS.md)
   in the coordinator repo (also linked via `externalDocs` on the `Confidential`
   tag in this spec). Each wallet
   has a single confidential identity (the custody wallet itself); there is no

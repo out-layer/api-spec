@@ -39,7 +39,7 @@
       "description": "Confidential intents — move balances between the public intents shard, the Defuse confidential shard, and external chains. The confidential balance ledger is real on-chain state on a separate **private** shard (the `intents.far` contract, distinct from public `intents.near`); it has no public RPC, so you cannot read it externally, but it is an auditable smart contract. Only SHIELD/UNSHIELD touch the public chain. Requires `ENABLE_CONFIDENTIAL_INTENTS` + the confidential partner agreement on the deployment, else every route returns 503. See the agent integration guide referenced under `externalDocs` for the full mental model, privacy recipes, and curl walkthroughs.",
       "externalDocs": {
         "description": "Confidential intents — agent integration guide (mental model, privacy recipes, curl walkthroughs)",
-        "url": "https://github.com/out-layer/outlayer-coordinator/blob/main/docs/CONFIDENTIAL_INTENTS.md"
+        "url": "https://github.com/out-layer/coordinator/blob/main/docs/CONFIDENTIAL_INTENTS.md"
       }
     },
     {

@@ -50,7 +50,7 @@ tags:
       description: >-
         Confidential intents — agent integration guide (mental model, privacy
         recipes, curl walkthroughs)
-      url: https://github.com/out-layer/outlayer-coordinator/blob/main/docs/CONFIDENTIAL_INTENTS.md
+      url: https://github.com/out-layer/coordinator/blob/main/docs/CONFIDENTIAL_INTENTS.md
   - name: Policy
     description: Encrypted on-chain policy lifecycle (read, encrypt, sign, cache).
   - name: Approvals
