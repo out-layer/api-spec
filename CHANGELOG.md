@@ -6,6 +6,32 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Added
 
+- **Confidential intents** (`Confidential` tag) — 9 new routes mirroring
+  `/wallet/v1/intents/*` against the Defuse confidential private shard
+  (the `intents.far` contract, distinct from public `intents.near`):
+  `POST /wallet/v1/confidential/{deposit,unshield,withdraw,withdraw/dry-run,transfer,swap,swap/quote,deposit-intent}`
+  and `GET /wallet/v1/confidential/balance`. New schemas:
+  `ConfidentialShieldRequest`, `ConfidentialUnshieldRequest`,
+  `ConfidentialWithdrawRequest`, `ConfidentialSwapRequest`,
+  `ConfidentialDepositIntentRequest`, `ConfidentialDepositIntentResponse`,
+  `ConfidentialTransferRequest`, `ConfidentialOpResponse`,
+  `ConfidentialBalanceResponse`, `ConfidentialBalanceEntry`,
+  `ConfidentialBalancesResponse`. New `503` response component
+  `ServiceUnavailable` + `ErrorCode`s `confidential_unavailable` /
+  `confidential_jwt_expired`. All confidential routes return `503` unless the
+  deployment has `ENABLE_CONFIDENTIAL_INTENTS` and the confidential partner
+  agreement configured. Privacy properties (balances are real on-chain state
+  on a separate private shard, the `intents.far` contract, which has no public
+  RPC so it cannot be read externally — not off-chain and not a solver
+  database; internal transfer/swap leave no public-chain trace, while
+  SHIELD/UNSHIELD and cross-chain in/out are the only edges that touch the
+  public chain) are documented in the route descriptions and CUSTODY docs —
+  see the agent integration guide
+  [`docs/CONFIDENTIAL_INTENTS.md`](https://github.com/out-layer/outlayer-coordinator/blob/main/docs/CONFIDENTIAL_INTENTS.md)
+  in the coordinator repo (also linked via `externalDocs` on the `Confidential`
+  tag in this spec). Each wallet
+  has a single confidential identity (the custody wallet itself); there is no
+  separate or unlinkable confidential identity.
 - `WithdrawResult` schema — typed result payload for a successful `withdraw`
   request. Documents `intent_hash` and `delivered` fields previously emitted
   unrecorded by the coordinator. Returned in `result` of
