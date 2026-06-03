@@ -1494,9 +1494,11 @@ components:
     RequestStatus:
       type: string
       enum:
+        - pending_deposit
         - processing
         - success
         - failed
+        - refunded
         - pending_approval
         - approved
         - rejected
