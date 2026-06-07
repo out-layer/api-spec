@@ -618,10 +618,10 @@ paths:
   # ============================================================================
   # Confidential intents (Defuse confidential shard)
   # ============================================================================
-  /wallet/v1/confidential/deposit:
+  /wallet/v1/confidential/shield:
     post:
       tags: [Confidential]
-      operationId: confidentialDeposit
+      operationId: confidentialShield
       summary: SHIELD — move public intents balance into the confidential shard
       description: |
         Moves the wallet's **public** `intents.near` balance into its
@@ -632,10 +632,56 @@ paths:
         **on-chain** (an `execute_intents` call signed by the wallet, with the
         public asset id visible). It is a convenience hop, not an unlinkable
         operation — for unlinkability fund the confidential balance via
-        `confidentialDepositIntent` (cross-chain) instead. See CUSTODY docs.
+        `confidentialDepositCrossChain` (cross-chain) instead. See CUSTODY docs.
 
         Async: returns `status=pending_deposit` with a `request_id`; poll
         `GET /wallet/v1/requests/{id}` until terminal.
+
+        **Legacy alias:** `POST /wallet/v1/confidential/deposit` still works and
+        resolves to the same handler.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfidentialShieldRequest'
+            example:
+              token: nep141:wrap.near
+              amount: '10000000000000000000000'
+      responses:
+        '200':
+          description: Shield submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfidentialOpResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /wallet/v1/confidential/deposit:
+    post:
+      tags: [Confidential]
+      operationId: confidentialDeposit
+      deprecated: true
+      summary: '[Deprecated] SHIELD into the confidential shard (use /wallet/v1/confidential/shield)'
+      description: |
+        **Deprecated legacy alias.** Use
+        [`confidentialShield`](#tag/Confidential/operation/confidentialShield)
+        (`POST /wallet/v1/confidential/shield`) instead. Retained for backward
+        compatibility; resolves to the same handler with identical
+        request/response shapes.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -914,19 +960,63 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
+  /wallet/v1/confidential/deposit/cross-chain:
+    post:
+      tags: [Confidential]
+      operationId: confidentialDepositCrossChain
+      summary: Cross-chain deposit into the confidential shard (quote only)
+      description: |
+        Requests a one-time deposit address to fund the confidential balance
+        from an external chain (`ORIGIN_CHAIN` → `CONFIDENTIAL_INTENTS`) via
+        1Click / NEAR Intents. The caller sends `amount` of the source asset to
+        the returned `deposit_address` out-of-band; the solver delivers it and
+        credits the confidential balance. **The wallet's NEAR address never
+        touches the public side** — this is the most private way to fund a
+        confidential balance. Poll `GET /wallet/v1/requests/{id}` for status.
+
+        **Legacy alias:** `POST /wallet/v1/confidential/deposit-intent` still
+        works and resolves to the same handler.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfidentialDepositIntentRequest'
+            example:
+              source_asset: nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near
+              amount: '500000'
+      responses:
+        '200':
+          description: Deposit address issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfidentialDepositIntentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
   /wallet/v1/confidential/deposit-intent:
     post:
       tags: [Confidential]
       operationId: confidentialDepositIntent
-      summary: Cross-chain deposit into the confidential shard (quote only)
+      deprecated: true
+      summary: '[Deprecated] Cross-chain deposit into the confidential shard (use /wallet/v1/confidential/deposit/cross-chain)'
       description: |
-        Requests a one-time bridge deposit address to fund the confidential
-        balance from an external chain (`ORIGIN_CHAIN` → `CONFIDENTIAL_INTENTS`).
-        The caller sends `amount` of the source asset to the returned
-        `deposit_address` out-of-band; the solver bridges it and credits the
-        confidential balance. **The wallet's NEAR address never touches the
-        public side** — this is the most private way to fund a confidential
-        balance. Poll `GET /wallet/v1/requests/{id}` for status.
+        **Deprecated legacy alias.** Use
+        [`confidentialDepositCrossChain`](#tag/Confidential/operation/confidentialDepositCrossChain)
+        (`POST /wallet/v1/confidential/deposit/cross-chain`) instead. Retained
+        for backward compatibility; resolves to the same handler with identical
+        request/response shapes.
       requestBody:
         required: true
         content:
@@ -993,16 +1083,20 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
-  /wallet/v1/deposit-intent:
+  /wallet/v1/intents/deposit/cross-chain:
     post:
       tags: [Wallet]
-      operationId: createDepositIntent
-      summary: Create a cross-chain deposit intent (1Click)
+      operationId: intentsDepositCrossChain
+      summary: Create a cross-chain deposit (via 1Click / NEAR Intents)
       description: |
         Requests a one-time deposit address on a source chain via NEAR Intents
         1Click. The caller sends `amount` of the source token to the returned
-        `deposit_address`; the solver bridges it and credits the wallet's
-        intents.near balance. Poll `getDepositStatus` until `success`.
+        `deposit_address`; the solver delivers it and credits the wallet's
+        intents.near balance. Poll `getCrossChainDepositStatus` until `success`.
+
+        This is a **cross-chain deposit via 1Click / NEAR Intents** — the
+        wallet's NEAR address receives the intents.near credit once the solver
+        settles the source-chain deposit.
 
         Two request shapes are accepted (see
         [`DepositIntentRequest`](#/components/schemas/DepositIntentRequest)):
@@ -1019,12 +1113,15 @@ paths:
         coordinator logs a warning. `near` is a valid source chain — a
         NEAR-origin deposit returns a 64-char hex implicit account.
 
-        Amounts are in the token's smallest unit. There's a small bridge fee,
+        Amounts are in the token's smallest unit. There's a small solver fee,
         so `amount_out` < `amount`.
 
         The returned `deposit_address` is chain-specific — see the
         [`DepositIntentResponse.deposit_address`](#/components/schemas/DepositIntentResponse)
         description for per-chain address formats.
+
+        **Legacy alias:** `POST /wallet/v1/deposit-intent` still works and
+        resolves to the same handler.
       requestBody:
         required: true
         content:
@@ -1063,18 +1160,58 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /wallet/v1/deposit-status:
+  /wallet/v1/deposit-intent:
+    post:
+      tags: [Wallet]
+      operationId: createDepositIntent
+      deprecated: true
+      summary: '[Deprecated] Create a cross-chain deposit (use /wallet/v1/intents/deposit/cross-chain)'
+      description: |
+        **Deprecated legacy alias.** Use
+        [`intentsDepositCrossChain`](#tag/Wallet/operation/intentsDepositCrossChain)
+        (`POST /wallet/v1/intents/deposit/cross-chain`) instead. This path is
+        retained for backward compatibility and resolves to the same handler
+        with identical request/response shapes — existing clients continue to
+        work unchanged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepositIntentRequest'
+      responses:
+        '200':
+          description: Deposit intent created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepositIntentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /wallet/v1/intents/deposit/cross-chain/status:
     get:
       tags: [Wallet]
-      operationId: getDepositStatus
-      summary: Poll a cross-chain deposit intent's status
+      operationId: getCrossChainDepositStatus
+      summary: Poll a cross-chain deposit's status
+      description: |
+        Returns the live status of a cross-chain deposit (from
+        `intentsDepositCrossChain`), lazily refreshing it against 1Click on each
+        call.
+
+        **Legacy alias:** `GET /wallet/v1/deposit-status` still works and
+        resolves to the same handler.
       parameters:
         - name: id
           in: query
           required: true
           schema:
             type: string
-          description: The `intent_id` from `createDepositIntent`.
+          description: The `intent_id` from `intentsDepositCrossChain`.
       responses:
         '200':
           description: Deposit status
@@ -1089,18 +1226,54 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /wallet/v1/deposits:
+  /wallet/v1/deposit-status:
     get:
       tags: [Wallet]
-      operationId: listDeposits
-      summary: List this wallet's cross-chain deposit intents
+      operationId: getDepositStatus
+      deprecated: true
+      summary: '[Deprecated] Poll a cross-chain deposit''s status (use /wallet/v1/intents/deposit/cross-chain/status)'
       description: |
-        Returns the wallet's cross-chain deposit intents (from
-        `createDepositIntent`), most recent first. Each entry has the same shape
-        as `getDepositStatus`, but the list endpoint does NOT lazily refresh
-        in-flight intents against 1Click — statuses are read straight from
-        storage as last persisted. Poll `getDepositStatus` for a single intent
-        when you need its live status.
+        **Deprecated legacy alias.** Use
+        [`getCrossChainDepositStatus`](#tag/Wallet/operation/getCrossChainDepositStatus)
+        (`GET /wallet/v1/intents/deposit/cross-chain/status`) instead. Retained
+        for backward compatibility; resolves to the same handler.
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The `intent_id` from the cross-chain deposit call.
+      responses:
+        '200':
+          description: Deposit status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepositStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /wallet/v1/intents/deposit/cross-chain/list:
+    get:
+      tags: [Wallet]
+      operationId: listCrossChainDeposits
+      summary: List this wallet's cross-chain deposits
+      description: |
+        Returns the wallet's cross-chain deposits (from
+        `intentsDepositCrossChain`), most recent first. Each entry has the same
+        shape as `getCrossChainDepositStatus`, but the list endpoint does NOT
+        lazily refresh in-flight deposits against 1Click — statuses are read
+        straight from storage as last persisted. Poll
+        `getCrossChainDepositStatus` for a single deposit when you need its live
+        status.
+
+        **Legacy alias:** `GET /wallet/v1/deposits` still works and resolves to
+        the same handler.
       parameters:
         - name: limit
           in: query
@@ -1119,7 +1292,48 @@ paths:
           description: Number of rows to skip for pagination.
       responses:
         '200':
-          description: Deposit intents (most recent first)
+          description: Cross-chain deposits (most recent first)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DepositStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /wallet/v1/deposits:
+    get:
+      tags: [Wallet]
+      operationId: listDeposits
+      deprecated: true
+      summary: '[Deprecated] List cross-chain deposits (use /wallet/v1/intents/deposit/cross-chain/list)'
+      description: |
+        **Deprecated legacy alias.** Use
+        [`listCrossChainDeposits`](#tag/Wallet/operation/listCrossChainDeposits)
+        (`GET /wallet/v1/intents/deposit/cross-chain/list`) instead. Retained
+        for backward compatibility; resolves to the same handler.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+          description: Max rows to return (server caps at 100). Defaults to 20.
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+          description: Number of rows to skip for pagination.
+      responses:
+        '200':
+          description: Cross-chain deposits (most recent first)
           content:
             application/json:
               schema:
@@ -1801,11 +2015,11 @@ paths:
               $ref: '#/components/schemas/RejectRequest'
       responses:
         '200':
-          description: Rejection recorded
+          description: Reject vote recorded (request cancelled if from a real approver)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApproveResponse'
+                $ref: '#/components/schemas/RejectResponse'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -1955,9 +2169,9 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
           examples:
-            confidential_unavailable:
+            service_unavailable:
               value:
-                error: confidential_unavailable
+                error: service_unavailable
                 message: Confidential intents are not configured on this deployment
     BadGateway:
       description: >-
@@ -2037,7 +2251,7 @@ components:
         - duplicate_idempotency_key
         - internal_error
         - keystore_error
-        - confidential_unavailable
+        - service_unavailable
         - confidential_jwt_expired
 
     ErrorResponse:
@@ -2548,8 +2762,8 @@ components:
       allOf:
         - $ref: '#/components/schemas/DefuseAssetId'
       description: |-
-        Defuse asset id the recipient will hold after the bridge. Defaults
-        to NEAR USDC.
+        Defuse asset id the recipient will hold after the cross-chain deposit
+        settles. Defaults to NEAR USDC.
       default: nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1
 
     DepositIntentRequest:
@@ -2591,8 +2805,8 @@ components:
             refund_address:
               type: string
               description: |-
-                Address on the source chain to refund to if the bridge
-                fails. Defaults to the wallet's derived address on that
+                Address on the source chain to refund to if the cross-chain
+                deposit fails. Defaults to the wallet's derived address on that
                 chain.
         - title: ByChainAndToken
           description: |-
@@ -2653,7 +2867,7 @@ components:
           type: string
         amount_out:
           type: string
-          description: Amount credited after the bridge fee.
+          description: Amount credited after the cross-chain deposit fee.
         min_amount_out:
           type: string
         expires_at:
@@ -2666,7 +2880,7 @@ components:
         estimated_time_secs:
           type: integer
           description: |-
-            Solver's estimate of bridge settlement time, in seconds. Absent
+            Solver's estimate of deposit settlement time, in seconds. Absent
             if 1Click did not return an estimate.
         hint:
           type: string
@@ -3467,6 +3681,22 @@ components:
           type: [string, 'null']
           format: uuid
 
+    RejectResponse:
+      type: object
+      required: [approval_id, status]
+      properties:
+        approval_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          description: >-
+            `rejected` — the reject came from a REAL policy approver, so the request is
+            cancelled (a real reject vetoes it irrevocably). `reject_vote_recorded` — the
+            signer is not a configured approver: the vote is stored and the request stays
+            `pending_approval` (the keystore still vetoes execution at sign time).
+          enum: [rejected, reject_vote_recorded]
+
     # ----- Audit & requests -----
     AuditEvent:
       type: object
@@ -3613,16 +3843,16 @@ components:
         - $ref: '#/components/schemas/SwapRequest'
     ConfidentialDepositIntentRequest:
       description: >-
-        Cross-chain deposit-intent body — same shape as `DepositIntentRequest`
+        Cross-chain deposit body — same shape as `DepositIntentRequest`
         (`source_asset` or `chain`+`token`). NOTE: for the confidential endpoint
         `destination_asset` and `refund_address` are **ignored** — the
-        destination is forced to the origin asset (same-asset bridge into the
-        confidential shard) and refund is forced to the wallet's 64-hex
+        destination is forced to the origin asset (same-asset cross-chain deposit
+        into the confidential shard) and refund is forced to the wallet's 64-hex
         intentsUserId (the `refundType=CONFIDENTIAL_INTENTS` invariant).
       allOf:
         - $ref: '#/components/schemas/DepositIntentRequest'
     ConfidentialDepositIntentResponse:
-      description: Bridge deposit address — same shape as `DepositIntentResponse`.
+      description: Cross-chain deposit address — same shape as `DepositIntentResponse`.
       allOf:
         - $ref: '#/components/schemas/DepositIntentResponse'
 
