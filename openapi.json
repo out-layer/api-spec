@@ -338,6 +338,9 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
+          "422": {
+            "$ref": "#/components/responses/OnChainTxFailed"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -408,6 +411,9 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
+          "422": {
+            "$ref": "#/components/responses/OnChainTxFailed"
+          },
           "500": {
             "$ref": "#/components/responses/InternalError"
           }
@@ -461,6 +467,9 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
+          "422": {
+            "$ref": "#/components/responses/OnChainTxFailed"
+          },
           "500": {
             "$ref": "#/components/responses/InternalError"
           }
@@ -512,6 +521,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/OnChainTxFailed"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -565,6 +577,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/OnChainTxFailed"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -896,9 +911,6 @@
           "500": {
             "$ref": "#/components/responses/InternalError"
           },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           }
@@ -956,9 +968,6 @@
           "500": {
             "$ref": "#/components/responses/InternalError"
           },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           }
@@ -1014,9 +1023,6 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
-          },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -1076,9 +1082,6 @@
           "500": {
             "$ref": "#/components/responses/InternalError"
           },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           }
@@ -1122,9 +1125,6 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
-          },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -1183,9 +1183,6 @@
           "500": {
             "$ref": "#/components/responses/InternalError"
           },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           }
@@ -1243,9 +1240,6 @@
           "500": {
             "$ref": "#/components/responses/InternalError"
           },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           }
@@ -1289,9 +1283,6 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
-          },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -1343,9 +1334,6 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
-          },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -1399,9 +1387,6 @@
           "500": {
             "$ref": "#/components/responses/InternalError"
           },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           }
@@ -1453,9 +1438,6 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
-          },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -2229,8 +2211,8 @@
           "500": {
             "$ref": "#/components/responses/InternalError"
           },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -2886,7 +2868,15 @@
         }
       },
       "ServiceUnavailable": {
-        "description": "Feature not enabled/configured on this deployment. Returned by the `/wallet/v1/confidential/*` routes when `ENABLE_CONFIDENTIAL_INTENTS` is off or the confidential upstream is not configured.",
+        "description": "Unavailable — either permanently on this deployment or transiently. `service_unavailable`: feature not enabled/configured (e.g. the `/wallet/v1/confidential/*` routes when `ENABLE_CONFIDENTIAL_INTENTS` is off or the confidential upstream is not configured) — do not retry. `keystore_error`: the TEE keystore (signing / key derivation) was unreachable or rejected the request — transient, retry after the `Retry-After` header. `confidential_jwt_expired`: the confidential per-account JWT was rejected by the 1Click upstream and re-authentication also failed — transient, retry after `Retry-After`. (Transient upstream failures use 503 rather than 502 because Cloudflare replaces origin 502/504 responses with its own HTML error page, hiding the JSON body from clients.)",
+        "headers": {
+          "Retry-After": {
+            "description": "Present on transient failures (`keystore_error`, `confidential_jwt_expired`) — seconds to wait before retrying.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        },
         "content": {
           "application/json": {
             "schema": {
@@ -2898,19 +2888,7 @@
                   "error": "service_unavailable",
                   "message": "Confidential intents are not configured on this deployment"
                 }
-              }
-            }
-          }
-        }
-      },
-      "BadGateway": {
-        "description": "Upstream dependency failed. `keystore_error`: the TEE keystore (signing / key derivation) was unreachable or rejected the request. `confidential_jwt_expired`: the confidential per-account JWT was rejected by the 1Click upstream and re-authentication also failed.",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ErrorResponse"
-            },
-            "examples": {
+              },
               "keystore_error": {
                 "value": {
                   "error": "keystore_error"
@@ -2919,6 +2897,35 @@
               "confidential_jwt_expired": {
                 "value": {
                   "error": "confidential_jwt_expired"
+                }
+              }
+            }
+          }
+        }
+      },
+      "OnChainTxFailed": {
+        "description": "The transaction was signed and broadcast — the network accepted it — but its on-chain execution REVERTED. `tx_hash` is real (the tx is on chain); no state-changing effect happened. Do NOT retry: re-broadcasting duplicates an already-recorded transaction and burns gas again. `message` is the decoded FunctionCallError / panic string, `failure` the raw NEAR execution-failure JSON. (422 rather than 502 because Cloudflare replaces origin 502/504 responses with its own HTML error page, which would hide this body from clients.) Scope: synchronous execution only. When the operation goes through the multisig approval flow instead, execution happens in the background after the threshold is met — a revert there surfaces as `status: \"failed\"` via `GET /wallet/v1/requests/{request_id}` and the `request_completed` webhook, never as a synchronous 422.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/OnChainTxFailedError"
+            },
+            "examples": {
+              "onchain_tx_failed": {
+                "value": {
+                  "error": "onchain_tx_failed",
+                  "message": "Exceeded the prepaid gas.",
+                  "tx_hash": "8YyQnDxNSgrtZtAhDwHRfcpyTAcqGJ4kdmSf7eVLh2dG",
+                  "failure": {
+                    "ActionError": {
+                      "index": 0,
+                      "kind": {
+                        "FunctionCallError": {
+                          "ExecutionError": "Exceeded the prepaid gas."
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -2985,6 +2992,7 @@
           "bad_request",
           "conflict",
           "duplicate_idempotency_key",
+          "onchain_tx_failed",
           "internal_error",
           "keystore_error",
           "service_unavailable",
@@ -3006,6 +3014,31 @@
           "details": {
             "type": "object",
             "additionalProperties": {}
+          }
+        }
+      },
+      "OnChainTxFailedError": {
+        "type": "object",
+        "required": [
+          "error",
+          "tx_hash"
+        ],
+        "description": "Body of the 422 `onchain_tx_failed` response. Unlike `ErrorResponse`,\nit carries the real `tx_hash` (the transaction IS on chain) and the raw\nNEAR execution-failure JSON.\n",
+        "properties": {
+          "error": {
+            "type": "string",
+            "const": "onchain_tx_failed"
+          },
+          "message": {
+            "type": "string",
+            "description": "Decoded FunctionCallError / contract panic string."
+          },
+          "tx_hash": {
+            "type": "string",
+            "description": "Hash of the broadcast transaction. Real — the tx is on chain."
+          },
+          "failure": {
+            "description": "Raw NEAR execution-failure JSON (e.g. `ActionError`)."
           }
         }
       },
