@@ -4,9 +4,9 @@ What's in the spec, what's not, and why.
 
 ## In scope (v0.1)
 
-**22 endpoints** across wallet, policy, approvals, audit, and request tracking.
+**25 endpoints** across wallet, policy, approvals, audit, and request tracking.
 
-### Wallet (12 endpoints)
+### Wallet (15 endpoints)
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -21,6 +21,9 @@ What's in the spec, what's not, and why.
 | POST | `/wallet/v1/intents/swap` | 1Click cross-chain swap |
 | POST | `/wallet/v1/intents/swap/quote` | Swap price preview |
 | POST | `/wallet/v1/sign-message` | NEP-413 / raw signing |
+| POST | `/wallet/v1/evm/sign-typed-data` | EVM EIP-712 (v4) typed-data signing |
+| POST | `/wallet/v1/evm/sign-message` | EVM EIP-191 personal_sign |
+| POST | `/wallet/v1/evm/sign-transaction` | EVM raw tx (client-serialized; keccak256 + sign) |
 
 ### Registration (1 endpoint)
 

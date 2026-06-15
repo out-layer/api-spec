@@ -4,7 +4,7 @@
     "title": "OutLayer API",
     "version": "0.1.0-alpha.1",
     "summary": "HTTP API for OutLayer custody wallets and policy enforcement",
-    "description": "OutLayer Agent Custody — multi-chain wallets for AI agents with TEE-enforced\npolicy, multisig approvals, audit log, and gasless cross-chain transfers via\nNEAR Intents.\n\nPrivate keys live exclusively inside an Intel TDX TEE and are derived from\nNEAR MPC. The wallet owner sets policy (spending limits, whitelists,\nmultisig, freeze) — all enforced inside the TEE before signing.\n\nSee [CUSTODY docs](https://outlayer.fastnear.com/docs/agent-custody) for the\narchitectural overview and [@outlayer/sdk](https://www.npmjs.com/package/@outlayer/sdk)\nfor the TypeScript client.\n",
+    "description": "OutLayer Agent Custody — multi-chain wallets for AI agents with TEE-enforced\npolicy, multisig approvals, audit log, gasless cross-chain transfers via\nNEAR Intents, and off-chain EVM signing (EIP-712 typed data, EIP-191\npersonal_sign, and client-serialized raw transactions).\n\nPrivate keys live exclusively inside an Intel TDX TEE and are derived from\nNEAR MPC. The wallet owner sets policy (spending limits, whitelists,\nmultisig, freeze) — all enforced inside the TEE before signing.\n\nSee [CUSTODY docs](https://outlayer.fastnear.com/docs/agent-custody) for the\narchitectural overview and [@outlayer/sdk](https://www.npmjs.com/package/@outlayer/sdk)\nfor the TypeScript client.\n",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -32,7 +32,7 @@
     },
     {
       "name": "Wallet",
-      "description": "Multi-chain custody operations — transfer, withdraw, swap, balance, signing."
+      "description": "Multi-chain custody operations — transfer, withdraw, swap, balance, and signing, including NEAR (NEP-413) message signing and off-chain EVM signing (EIP-712 typed data, EIP-191 personal_sign, and client-serialized raw transactions)."
     },
     {
       "name": "Confidential",
@@ -854,6 +854,138 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/wallet/v1/evm/sign-typed-data": {
+      "post": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "evmSignTypedData",
+        "summary": "Sign EIP-712 typed data (EVM)",
+        "description": "Sign an EIP-712 v4 typed-data object with the wallet's EVM (secp256k1)\nkey for `chain`. The digest is computed server-side from the full\ntyped-data object (no client-supplied hash is trusted); `ecrecover` over\nit returns the address from `GET /wallet/v1/address?chain=<evm>`. This is\nthe core trading primitive (signs CLOB orders). Off-chain — returns the\nsignature only, no broadcast. Gated by the `evm_sign` capability.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvmSignTypedDataRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signature",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvmSignResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/wallet/v1/evm/sign-message": {
+      "post": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "evmSignMessage",
+        "summary": "Sign an EIP-191 personal_sign message (EVM)",
+        "description": "Sign an EIP-191 `personal_sign` message with the wallet's EVM key.\n`message` is `0x`-hex (signed as raw bytes) or a UTF-8 string. Used for\nvenue L1 auth (e.g. deriving a Polymarket CLOB API key). Gated by the\n`evm_sign` capability.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvmSignMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signature",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvmSignResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/wallet/v1/evm/sign-transaction": {
+      "post": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "evmSignTransaction",
+        "summary": "Sign a raw EVM transaction",
+        "description": "Sign a raw EVM transaction with the wallet's EVM key. The caller supplies\nthe **serialized unsigned transaction** (`unsigned_tx`, e.g. viem\n`serializeTransaction(tx)` — `0x02‖rlp(...)` for EIP-1559); the service\nkeccak256-hashes it and returns the recoverable signature. It does NOT\nassemble the transaction, manage nonce/gas, or broadcast — the caller\nassembles the final signed tx and broadcasts it. For an EIP-1559 tx the\n`yParity` needed to assemble is `v - 27`. Gated by the **`evm_sign.raw_tx`**\nsub-capability (default-OFF, separate from base `evm_sign`).\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvmSignTransactionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signature",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvmSignResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -2939,10 +3071,16 @@
         "enum": [
           "near",
           "ethereum",
+          "polygon",
+          "base",
+          "arbitrum",
+          "optimism",
+          "bsc",
+          "avalanche",
           "solana",
           "bitcoin"
         ],
-        "description": "Supported chain identifier."
+        "description": "Supported chain identifier. The EVM chains (ethereum, polygon, base, arbitrum, optimism, bsc, avalanche) all share ONE derived address (a single secp256k1 key) and are signable via `/wallet/v1/evm/*`. `solana` / `bitcoin` can be derived in the keystore but are not yet serviced by wallet v1."
       },
       "RequestType": {
         "type": "string",
@@ -4631,9 +4769,23 @@
           }
         }
       },
+      "EvmSignCapability": {
+        "type": "object",
+        "description": "`evm_sign` — EVM signing (EIP-712 typed-data / EIP-191 personal_sign / raw tx). **Default-DENY under a policy** (like the other fund-moving capabilities) — set `allowed: true` to permit. A wallet with no policy is unrestricted. CAVEAT (why it must be opt-in): an EIP-712 signature is itself fund-moving (EIP-3009 `TransferWithAuthorization` ≈ transfer, EIP-2612 `Permit` ≈ approve), so this grants full authority over the EVM address's float (bounded to what you bridge there — the NEAR-intents balance is never exposed to any EVM signature). `raw_tx` (default false) is a SEPARATE kill-switch for arbitrary raw transactions; it does NOT contain typed-data drains.",
+        "properties": {
+          "allowed": {
+            "type": "boolean",
+            "description": "Master on/off for EVM signing. Default false (opt in with true)."
+          },
+          "raw_tx": {
+            "type": "boolean",
+            "description": "Permit signing arbitrary raw EVM transactions. Default false."
+          }
+        }
+      },
       "Capabilities": {
         "type": "object",
-        "description": "Default-DENY opt-ins for the non-Built primitives, stored alongside\n`rules` / `approval` in the encrypted policy. Every capability defaults to\nDENY **except** `sign_message` (defaults allowed).\n",
+        "description": "Default-DENY opt-ins for the non-Built primitives, stored alongside\n`rules` / `approval` in the encrypted policy. Every capability defaults to\nDENY under a policy **except** `sign_message` (default-allow). A wallet\nwith no policy at all is unrestricted.\n",
         "properties": {
           "raw_sign": {
             "$ref": "#/components/schemas/RawSignCapability"
@@ -4652,6 +4804,86 @@
           },
           "sign_message": {
             "$ref": "#/components/schemas/SignMessageCapability"
+          },
+          "evm_sign": {
+            "$ref": "#/components/schemas/EvmSignCapability"
+          }
+        }
+      },
+      "EvmSignTypedDataRequest": {
+        "type": "object",
+        "required": [
+          "chain",
+          "typed_data"
+        ],
+        "properties": {
+          "chain": {
+            "$ref": "#/components/schemas/Chain"
+          },
+          "typed_data": {
+            "type": "object",
+            "description": "Standard EIP-712 v4 object (as `eth_signTypedData_v4`): `{ domain, types, primaryType, message }`. Arbitrary struct types are supported (incl. EIP-3009 `TransferWithAuthorization` and EIP-2612 `Permit`). The digest is computed server-side — no client-supplied hash is trusted."
+          }
+        }
+      },
+      "EvmSignMessageRequest": {
+        "type": "object",
+        "required": [
+          "chain",
+          "message"
+        ],
+        "properties": {
+          "chain": {
+            "$ref": "#/components/schemas/Chain"
+          },
+          "message": {
+            "type": "string",
+            "description": "The message to sign under EIP-191 `personal_sign`, interpreted per `encoding`."
+          },
+          "encoding": {
+            "type": "string",
+            "enum": [
+              "utf8",
+              "hex"
+            ],
+            "default": "utf8",
+            "description": "How to interpret `message`. `utf8` (default) signs its UTF-8 bytes (matches viem `hashMessage(string)` / MetaMask `personal_sign`); `hex` treats `message` as hex (`0x`-prefixed or bare) and signs the decoded bytes (viem `hashMessage({ raw })`). No content sniffing — malformed hex is rejected."
+          }
+        }
+      },
+      "EvmSignTransactionRequest": {
+        "type": "object",
+        "required": [
+          "chain",
+          "unsigned_tx"
+        ],
+        "properties": {
+          "chain": {
+            "$ref": "#/components/schemas/Chain"
+          },
+          "unsigned_tx": {
+            "type": "string",
+            "description": "Serialized unsigned transaction, `0x`-hex (e.g. viem `serializeTransaction(tx)`). The service keccak256-hashes and signs it — it does not parse, assemble, or broadcast the transaction."
+          }
+        }
+      },
+      "EvmSignResponse": {
+        "type": "object",
+        "required": [
+          "signature",
+          "chain",
+          "wallet_id"
+        ],
+        "properties": {
+          "signature": {
+            "type": "string",
+            "description": "65-byte recoverable EVM signature, `0x`-hex (`r‖s‖v`, `v ∈ {27,28}`, low-s). `ecrecover` over the signed digest returns the wallet's EVM address."
+          },
+          "chain": {
+            "$ref": "#/components/schemas/Chain"
+          },
+          "wallet_id": {
+            "type": "string"
           }
         }
       },

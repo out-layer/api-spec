@@ -56,6 +56,33 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
   point clients at `POST /wallet/v1/intents/deposit` (one-tx
   `ft_transfer_call`, no 1Click solver hop). Backward-compatible —
   existing clients that don't read the field are unaffected.
+- **Off-chain EVM signing** (`Wallet` tag) — 3 new routes for signing EVM
+  payloads with the custody wallet's secp256k1 key without ever building or
+  broadcasting a transaction:
+  `POST /wallet/v1/evm/sign-typed-data` (EIP-712 v4),
+  `POST /wallet/v1/evm/sign-message` (EIP-191 `personal_sign`), and
+  `POST /wallet/v1/evm/sign-transaction` (raw tx — the **client** serializes
+  the unsigned transaction; the keystore only keccak256-hashes and signs it,
+  performing no assembly, nonce/gas selection, or broadcast; for EIP-1559 the
+  returned `yParity` is `v - 27`). New schemas:
+  `EvmSignTypedDataRequest`, `EvmSignMessageRequest`,
+  `EvmSignTransactionRequest`, and `EvmSignResponse` (65-byte `0x` `r‖s‖v`
+  signature, `v ∈ {27, 28}`, low-s). All signatures use a hand-rolled EIP-712
+  encoder (no alloy/ethers). New policy capability `EvmSignCapability` with
+  `evm_sign` **default-DENY under a policy** (set `allowed:true` to permit; a
+  wallet with no policy is unrestricted; `sign_message` is the only default-allow
+  capability) and a `raw_tx` sub-flag **default-OFF** gating raw-tx signing;
+  `requires_approval` is not supported for `evm_sign`. Note that an
+  EIP-712 signature is itself fund-moving (EIP-3009 ≈ transfer, EIP-2612 ≈
+  approve), so `evm_sign` grants full authority over the EVM address float —
+  bounded to whatever is bridged there; the NEAR-intents balance is never
+  exposed. `GET /wallet/v1/address` now serves all supported EVM chains
+  (`ethereum`, `polygon`, `base`, `arbitrum`, `optimism`, `bsc`, `avalanche`,
+  plus aliases `eth`/`pol`/`matic`/`arb`/`op`/`avax` via the `Chain` enum),
+  returning one shared secp256k1 `0x` address; Solana stays gated and account
+  delete stays NEAR-only. Broadcast, gas, and nonce remain the client's
+  responsibility — the keystore and coordinator never build or broadcast an
+  EVM transaction.
 
 ### Changed
 
