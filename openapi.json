@@ -594,7 +594,7 @@
         ],
         "operationId": "intentsWithdraw",
         "summary": "Withdraw via NEAR Intents (native NEAR / wNEAR / cross-chain)",
-        "description": "Gasless withdrawal through NEAR Intents solver relay. The wallet's\nintents.near balance is debited; the receiver gets funds without paying\ngas on either side.\n\n**`chain=near`** — the `token` field selects what the recipient receives:\n  - omitted / `near` / `native` (default): **native NEAR**. intents.near\n    unwraps the wallet's wNEAR (`native_withdraw` intent) and sends native\n    NEAR. The recipient needs **no** `wrap.near` storage. The recipient\n    account must already exist (or be a 64-char implicit account) —\n    withdrawing to a non-existent named account is rejected (the unwrapped\n    wNEAR would otherwise be burned).\n  - `nep141:wrap.near`: **wNEAR** (NEP-141). Recipient must be\n    storage-registered on `wrap.near`.\n  - other `nep141:<token>`: that NEP-141. Recipient must be storage-registered.\n\n**Other chains** (`ethereum`, `solana`, `bitcoin`, ...) — `token` is the\nsource Intents asset; 1Click bridges and delivers the destination chain's\nnative asset.\n\nIf the policy requires approval, returns `status=pending_approval` with\nan `approval_id`.\n",
+        "description": "Gasless withdrawal through NEAR Intents solver relay. The wallet's\nintents.near balance is debited; the receiver gets funds without paying\ngas on either side.\n\n**`chain=near`** — the `token` field selects what the recipient receives:\n  - omitted / `near` / `native` (default): **native NEAR**. intents.near\n    unwraps the wallet's wNEAR (`native_withdraw` intent) and sends native\n    NEAR. The recipient needs **no** `wrap.near` storage. The recipient\n    account must already exist (or be a 64-char implicit account) —\n    withdrawing to a non-existent named account is rejected (the unwrapped\n    wNEAR would otherwise be burned).\n  - `nep141:wrap.near`: **wNEAR** (NEP-141). Recipient must be\n    storage-registered on `wrap.near`.\n  - other `nep141:<token>`: that NEP-141. Recipient must be storage-registered.\n\n**Other chains** (`ethereum`, `solana`, `bitcoin`, ...) — `token` is the\nsource Intents asset; 1Click bridges and delivers the destination chain's\nnative asset.\n\nIf the policy requires approval, returns `status=pending_approval` with\nan `approval_id`.\n\n**Cross-chain withdrawals are best called with `async=true`**: the bridge\ncan take longer than the synchronous response window, so the call returns\n`status=processing` + a `poll_url` immediately and you poll\n`GET /wallet/v1/requests/{request_id}` for the terminal status.\n",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -3690,6 +3690,11 @@
           "token": {
             "type": "string",
             "description": "Token ID, e.g. `nep141:usdt.tether-token.near`. For `chain=near`, omit (or use `near`/`native`) to deliver **native NEAR** (unwraps the wallet's wNEAR); use `nep141:wrap.near` to deliver wNEAR instead. For other chains, this is the source Intents asset bridged via 1Click."
+          },
+          "async": {
+            "type": "boolean",
+            "default": false,
+            "description": "When `true`, the call returns immediately with `status=processing` and a `poll_url`; the withdrawal settles in the background and the caller polls `GET /wallet/v1/requests/{request_id}` for the terminal status. **Recommended for cross-chain withdrawals**, whose bridge can take longer than the synchronous response window. When `false` (default) the call blocks until the withdrawal settles. Auth, policy and validation errors are returned synchronously in both modes; in async mode only an execution failure surfaces as the request's `failed` status."
           }
         }
       },
@@ -3755,6 +3760,13 @@
               "null"
             ],
             "description": "Canonical request hash to sign when `status=pending_approval` (otherwise absent)."
+          },
+          "poll_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Present when `async=true` (`status=processing`) — poll this path (`GET /wallet/v1/requests/{request_id}`) for the terminal status."
           }
         }
       },

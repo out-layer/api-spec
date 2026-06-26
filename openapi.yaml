@@ -489,6 +489,11 @@ paths:
 
         If the policy requires approval, returns `status=pending_approval` with
         an `approval_id`.
+
+        **Cross-chain withdrawals are best called with `async=true`**: the bridge
+        can take longer than the synchronous response window, so the call returns
+        `status=processing` + a `poll_url` immediately and you poll
+        `GET /wallet/v1/requests/{request_id}` for the terminal status.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -2829,6 +2834,19 @@ components:
             omit (or use `near`/`native`) to deliver **native NEAR** (unwraps the
             wallet's wNEAR); use `nep141:wrap.near` to deliver wNEAR instead. For
             other chains, this is the source Intents asset bridged via 1Click.
+        async:
+          type: boolean
+          default: false
+          description: >-
+            When `true`, the call returns immediately with `status=processing`
+            and a `poll_url`; the withdrawal settles in the background and the
+            caller polls `GET /wallet/v1/requests/{request_id}` for the terminal
+            status. **Recommended for cross-chain withdrawals**, whose bridge can
+            take longer than the synchronous response window. When `false`
+            (default) the call blocks until the withdrawal settles. Auth, policy
+            and validation errors are returned synchronously in both modes; in
+            async mode only an execution failure surfaces as the request's
+            `failed` status.
 
     IntentsTransferRequest:
       type: object
@@ -2876,6 +2894,11 @@ components:
           description: >-
             Canonical request hash to sign when `status=pending_approval`
             (otherwise absent).
+        poll_url:
+          type: [string, 'null']
+          description: >-
+            Present when `async=true` (`status=processing`) — poll this path
+            (`GET /wallet/v1/requests/{request_id}`) for the terminal status.
 
     DryRunResponse:
       type: object
