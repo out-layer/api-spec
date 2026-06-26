@@ -2419,6 +2419,7 @@ components:
         - pending_approval
         - approved
         - rejected
+        - needs_review
 
     ErrorCode:
       type: string

@@ -3105,7 +3105,8 @@
           "refunded",
           "pending_approval",
           "approved",
-          "rejected"
+          "rejected",
+          "needs_review"
         ]
       },
       "ErrorCode": {
