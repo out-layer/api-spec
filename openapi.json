@@ -993,6 +993,94 @@
         }
       }
     },
+    "/wallet/v1/solana/sign-message": {
+      "post": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "solanaSignMessage",
+        "summary": "Sign an off-chain message (Solana)",
+        "description": "Sign raw message bytes with the wallet's Solana (ed25519) key. The\ndecoded bytes are signed AS-IS (Solana convention — verifiable with\n`nacl.sign.detached.verify`; Sign-in-with-Solana flows work unchanged).\nBytes that parse as a valid Solana **transaction message** are rejected\n(HTTP 400): Solana has no EIP-191-style prefix separating messages from\ntransactions, so this guard (the same one Phantom/Solflare apply) keeps\nthe message endpoint from bypassing the `solana_sign.raw_tx`\nsub-capability. Off-chain — returns the signature only, no broadcast.\nGated by the `solana_sign` capability. The `sol` alias is accepted for\n`chain` and canonicalized — the response always echoes `solana`.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SolanaSignMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signature",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SolanaSignResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/wallet/v1/solana/sign-transaction": {
+      "post": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "solanaSignTransaction",
+        "summary": "Sign a Solana transaction message",
+        "description": "Sign a Solana transaction with the wallet's Solana (ed25519) key. The\ncaller supplies the **serialized unsigned transaction message**\n(`unsigned_tx`, base64 — what the signature covers: web3.js\n`tx.serializeMessage()` / `versionedTx.message.serialize()`); the\nservice signs the bytes as-is and returns the base58 signature. It does\nNOT parse or assemble the transaction, pick a blockhash, or broadcast —\nthe caller assembles the signed tx\n(`compact-u16 signature count ‖ signatures ‖ message`) and broadcasts\nit. Gated by the **`solana_sign.raw_tx`** sub-capability (default-OFF,\nseparate from base `solana_sign`). The `sol` alias is accepted for\n`chain` and canonicalized — the response always echoes `solana`.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SolanaSignTransactionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signature",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SolanaSignResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/wallet/v1/confidential/shield": {
       "post": {
         "tags": [
@@ -3080,7 +3168,7 @@
           "solana",
           "bitcoin"
         ],
-        "description": "Supported chain identifier. The EVM chains (ethereum, polygon, base, arbitrum, optimism, bsc, avalanche) all share ONE derived address (a single secp256k1 key) and are signable via `/wallet/v1/evm/*`. `solana` / `bitcoin` can be derived in the keystore but are not yet serviced by wallet v1."
+        "description": "Supported chain identifier. The EVM chains (ethereum, polygon, base, arbitrum, optimism, bsc, avalanche) all share ONE derived address (a single secp256k1 key) and are signable via `/wallet/v1/evm/*`. `solana` has its own derived ed25519 address and is signable via `/wallet/v1/solana/*`. `bitcoin` can be derived in the keystore but is not yet serviced by wallet v1."
       },
       "RequestType": {
         "type": "string",
@@ -4796,6 +4884,20 @@
           }
         }
       },
+      "SolanaSignCapability": {
+        "type": "object",
+        "description": "`solana_sign` — Solana signing (off-chain messages / transaction messages). **Default-DENY under a policy** (same model as `evm_sign`) — set `allowed: true` to permit. A wallet with no policy is unrestricted. CAVEAT: a signed Solana transaction message is itself fund-moving, so `raw_tx` grants full authority over the Solana address's float (bounded to what you send there — the NEAR-intents balance is never exposed to any Solana signature). The base flag covers message signing only; the service rejects \"message\" bytes that parse as a valid transaction message, so the message endpoint cannot bypass `raw_tx`.",
+        "properties": {
+          "allowed": {
+            "type": "boolean",
+            "description": "Master on/off for Solana signing. Default false (opt in with true)."
+          },
+          "raw_tx": {
+            "type": "boolean",
+            "description": "Permit signing Solana transaction messages. Default false."
+          }
+        }
+      },
       "Capabilities": {
         "type": "object",
         "description": "Default-DENY opt-ins for the non-Built primitives, stored alongside\n`rules` / `approval` in the encrypted policy. Every capability defaults to\nDENY under a policy **except** `sign_message` (default-allow). A wallet\nwith no policy at all is unrestricted.\n",
@@ -4820,6 +4922,9 @@
           },
           "evm_sign": {
             "$ref": "#/components/schemas/EvmSignCapability"
+          },
+          "solana_sign": {
+            "$ref": "#/components/schemas/SolanaSignCapability"
           }
         }
       },
@@ -4891,6 +4996,68 @@
           "signature": {
             "type": "string",
             "description": "65-byte recoverable EVM signature, `0x`-hex (`r‖s‖v`, `v ∈ {27,28}`, low-s). `ecrecover` over the signed digest returns the wallet's EVM address."
+          },
+          "chain": {
+            "$ref": "#/components/schemas/Chain"
+          },
+          "wallet_id": {
+            "type": "string"
+          }
+        }
+      },
+      "SolanaSignMessageRequest": {
+        "type": "object",
+        "required": [
+          "chain",
+          "message"
+        ],
+        "properties": {
+          "chain": {
+            "$ref": "#/components/schemas/Chain"
+          },
+          "message": {
+            "type": "string",
+            "description": "The message to sign, interpreted per `encoding`. The decoded bytes are signed as-is; bytes that parse as a valid Solana transaction message are rejected (use `/wallet/v1/solana/sign-transaction`)."
+          },
+          "encoding": {
+            "type": "string",
+            "enum": [
+              "utf8",
+              "hex",
+              "base64"
+            ],
+            "default": "utf8",
+            "description": "How to interpret `message`. `utf8` (default) signs its UTF-8 bytes; `hex` (`0x`-prefixed or bare) / `base64` decode `message` first and sign the decoded bytes. No content sniffing — malformed input is rejected."
+          }
+        }
+      },
+      "SolanaSignTransactionRequest": {
+        "type": "object",
+        "required": [
+          "chain",
+          "unsigned_tx"
+        ],
+        "properties": {
+          "chain": {
+            "$ref": "#/components/schemas/Chain"
+          },
+          "unsigned_tx": {
+            "type": "string",
+            "description": "Serialized unsigned transaction **message**, base64 (what the signature covers: web3.js `tx.serializeMessage()` / `versionedTx.message.serialize()`; max 1232 bytes — the Solana packet limit). The service signs the bytes as-is — it does not parse, assemble, or broadcast the transaction."
+          }
+        }
+      },
+      "SolanaSignResponse": {
+        "type": "object",
+        "required": [
+          "signature",
+          "chain",
+          "wallet_id"
+        ],
+        "properties": {
+          "signature": {
+            "type": "string",
+            "description": "64-byte ed25519 signature, base58 (Solana convention). Verifies against the wallet's Solana address (its base58 ed25519 public key) over the exact submitted bytes."
           },
           "chain": {
             "$ref": "#/components/schemas/Chain"
