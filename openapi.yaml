@@ -4386,17 +4386,18 @@ components:
         `GET /wallet/v1/requests/{id}`.
 
         Once the op is terminal, the request row's `result.swap_details`
-        carries `intent_hashes`, `near_tx_hashes`, `origin_chain_tx_hashes`
-        and `destination_chain_tx_hashes` — **all arrays of plain hash
-        strings** (upstream 1Click emits `{hash, explorerUrl}` objects; the
-        coordinator normalizes them to plain strings, so this wire shape is
-        stable regardless of upstream changes) — plus settled amounts and
-        refund fields (`amount_in`, `amount_out`, `refunded_amount`,
-        `refund_reason`, …). For an external-chain `confidentialWithdraw`,
-        `destination_chain_tx_hashes` holds the actual delivery transaction
-        on the destination chain; the arrays are empty until settlement and
-        may stay empty for shard-internal ops (shield / unshield / transfer /
-        swap).
+        carries `intentHashes`, `nearTxHashes`, `originChainTxHashes` and
+        `destinationChainTxHashes` — **all arrays of plain hash strings**,
+        with 1Click-style **camelCase** inner keys (the `swap_details`
+        container itself is snake_case). Upstream 1Click emits
+        `{hash, explorerUrl}` objects; the coordinator normalizes them to
+        plain strings, so this wire shape is stable regardless of upstream
+        changes. Also present: settled amounts and refund fields
+        (`amountIn`, `amountOut`, `refundedAmount`, `refundReason`, …). For
+        an external-chain `confidentialWithdraw`, `destinationChainTxHashes`
+        holds the actual delivery transaction on the destination chain; the
+        arrays are empty until settlement and may stay empty for
+        shard-internal ops (shield / unshield / transfer / swap).
 
         **Multisig:** the Trusted confidential ops (withdraw / transfer / swap)
         are subject to the wallet's approval policy. When approval is required the

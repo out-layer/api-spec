@@ -7,9 +7,10 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 ### Changed
 
 - **`ConfidentialOpResponse`** — documented the settled `result.swap_details`
-  block on the request row (`intent_hashes`, `near_tx_hashes`,
-  `origin_chain_tx_hashes`, `destination_chain_tx_hashes` — all arrays of
-  **plain hash strings** — plus settled amounts and refund fields). Upstream
+  block on the request row (`intentHashes`, `nearTxHashes`,
+  `originChainTxHashes`, `destinationChainTxHashes` — camelCase inner keys,
+  all arrays of **plain hash strings** — plus settled amounts and refund
+  fields). Upstream
   1Click switched the `*ChainTxHashes` elements from plain strings to
   `{hash, explorerUrl}` objects (2026-07-11); the coordinator normalizes them
   back to plain strings, so the OutLayer wire shape is unchanged and stable
