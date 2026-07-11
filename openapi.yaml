@@ -4236,6 +4236,15 @@ components:
 
             - `type = "withdraw"` — conforms to
               [`WithdrawResult`](#/components/schemas/WithdrawResult).
+            - Cross-chain withdraws (`intents_cross_chain_withdraw`) and
+              gasless swaps additionally carry a nullable
+              `destination_tx_hash` — the real delivery transaction on the
+              destination chain (safe to render as an explorer link on the
+              requested chain). `null` until the 1Click bridge settles; the
+              lazy on-read refresh fills it in, and the `request_completed`
+              webhook carries it. All other identifier fields
+              (`transfer_intent_hash`, `intent_hash`) are NEAR-Intents
+              hashes, NOT destination-chain transactions.
             - Other request types are not yet schema-documented; treat the
               object as opaque until added in a later spec release.
 
@@ -4375,6 +4384,19 @@ components:
         shard (`intents.far`, no public RPC), so there is no public `tx_hash`;
         track via `intent_hash` / `deposit_address` and poll
         `GET /wallet/v1/requests/{id}`.
+
+        Once the op is terminal, the request row's `result.swap_details`
+        carries `intent_hashes`, `near_tx_hashes`, `origin_chain_tx_hashes`
+        and `destination_chain_tx_hashes` — **all arrays of plain hash
+        strings** (upstream 1Click emits `{hash, explorerUrl}` objects; the
+        coordinator normalizes them to plain strings, so this wire shape is
+        stable regardless of upstream changes) — plus settled amounts and
+        refund fields (`amount_in`, `amount_out`, `refunded_amount`,
+        `refund_reason`, …). For an external-chain `confidentialWithdraw`,
+        `destination_chain_tx_hashes` holds the actual delivery transaction
+        on the destination chain; the arrays are empty until settlement and
+        may stay empty for shard-internal ops (shield / unshield / transfer /
+        swap).
 
         **Multisig:** the Trusted confidential ops (withdraw / transfer / swap)
         are subject to the wallet's approval policy. When approval is required the

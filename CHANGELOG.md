@@ -4,8 +4,29 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+### Changed
+
+- **`ConfidentialOpResponse`** — documented the settled `result.swap_details`
+  block on the request row (`intent_hashes`, `near_tx_hashes`,
+  `origin_chain_tx_hashes`, `destination_chain_tx_hashes` — all arrays of
+  **plain hash strings** — plus settled amounts and refund fields). Upstream
+  1Click switched the `*ChainTxHashes` elements from plain strings to
+  `{hash, explorerUrl}` objects (2026-07-11); the coordinator normalizes them
+  back to plain strings, so the OutLayer wire shape is unchanged and stable
+  regardless of upstream changes. For an external-chain `confidentialWithdraw`,
+  `destination_chain_tx_hashes` carries the actual destination-chain delivery
+  transaction. Description-only change — no schema or route changes.
+
 ### Added
 
+- **`destination_tx_hash` in gasless results** — cross-chain withdraw
+  (`intents_cross_chain_withdraw`) and gasless swap request rows now carry a
+  nullable `result.destination_tx_hash`: the real delivery transaction on the
+  destination chain (sourced from 1Click's `destinationChainTxHashes`).
+  `null` until the bridge settles; filled by the lazy on-read refresh and
+  included in the `request_completed` webhook payload. Documented on
+  `RequestStatusResponse.result`. Additive — no version bump, no breaking
+  change.
 - **Confidential intents** (`Confidential` tag) — 9 new routes mirroring
   `/wallet/v1/intents/*` against the Defuse confidential private shard
   (the `intents.far` contract, distinct from public `intents.near`):
