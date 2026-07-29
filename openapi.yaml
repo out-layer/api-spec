@@ -549,6 +549,22 @@ paths:
         Runs the full policy and balance check for a withdraw without signing
         or broadcasting. Useful for showing the user whether an action would
         succeed before they confirm.
+
+        Every pre-condition the real withdraw enforces is evaluated here, in the
+        same order: request shape, policy (same canonical op — cross-chain is
+        gated by the separate `cross_chain_withdraw` capability), intents
+        balance, NEAR recipient existence / NEP-141 storage registration, and —
+        for a cross-chain withdraw — a `dry` 1Click quote. The quote is what
+        surfaces bridge minimums, unsupported routes and missing liquidity
+        before the user confirms; its result is summarised in `message`.
+
+        Approval-gated wallets get the same pre-condition checks: a
+        `would_succeed: true` with `message` "Operation would require multisig
+        approval" means the op is executable once approvers sign.
+
+        Cross-chain results omit `estimated_fee`/`fee_token` — the bridge takes
+        its cut out of the transferred amount rather than charging NEAR gas, so
+        the quote line in `message` is the cost estimate.
       requestBody:
         required: true
         content:
@@ -1066,6 +1082,12 @@ paths:
       description: |
         Returns the indicative output for a confidential withdraw without
         signing or submitting. Read-only.
+
+        Applies the same gates as the real confidential withdraw, in the same
+        order: `to` is required (400 without it), then the policy decision over
+        the same canonical op (403 when frozen or denied), then the upstream
+        quote. A wallet whose policy requires approval still gets its quote —
+        the op is executable once approvers sign.
       requestBody:
         required: true
         content:
@@ -1083,6 +1105,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalError'
         '503':
@@ -2990,7 +3014,12 @@ components:
             Present when `would_succeed` is false. One of: `wallet_frozen`,
             `policy_denied`, `storage_not_registered` (wNEAR/NEP-141 recipient has no
             token storage), `recipient_not_found` (native NEAR to a non-existent named
-            account — would burn the wNEAR).
+            account — would burn the wNEAR), `insufficient_balance` (intents balance
+            below the requested amount), `invalid_request` (body the real withdraw
+            would reject with a 400), `bridge_rejected` (1Click refused the
+            cross-chain quote — below the bridge minimum, unsupported route or no
+            liquidity; `message` carries 1Click's own text, e.g. "Amount is too low
+            for bridge, try at least 303064").
         message:
           type: string
         estimated_fee:

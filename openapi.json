@@ -672,7 +672,7 @@
         ],
         "operationId": "intentsWithdrawDryRun",
         "summary": "Simulate a withdraw (policy + balance check, no execution)",
-        "description": "Runs the full policy and balance check for a withdraw without signing\nor broadcasting. Useful for showing the user whether an action would\nsucceed before they confirm.\n",
+        "description": "Runs the full policy and balance check for a withdraw without signing\nor broadcasting. Useful for showing the user whether an action would\nsucceed before they confirm.\n\nEvery pre-condition the real withdraw enforces is evaluated here, in the\nsame order: request shape, policy (same canonical op — cross-chain is\ngated by the separate `cross_chain_withdraw` capability), intents\nbalance, NEAR recipient existence / NEP-141 storage registration, and —\nfor a cross-chain withdraw — a `dry` 1Click quote. The quote is what\nsurfaces bridge minimums, unsupported routes and missing liquidity\nbefore the user confirms; its result is summarised in `message`.\n\nApproval-gated wallets get the same pre-condition checks: a\n`would_succeed: true` with `message` \"Operation would require multisig\napproval\" means the op is executable once approvers sign.\n\nCross-chain results omit `estimated_fee`/`fee_token` — the bridge takes\nits cut out of the transferred amount rather than charging NEAR gas, so\nthe quote line in `message` is the cost estimate.\n",
         "requestBody": {
           "required": true,
           "content": {
@@ -1315,7 +1315,7 @@
         ],
         "operationId": "confidentialWithdrawDryRun",
         "summary": "Quote a confidential withdraw (no execution)",
-        "description": "Returns the indicative output for a confidential withdraw without\nsigning or submitting. Read-only.\n",
+        "description": "Returns the indicative output for a confidential withdraw without\nsigning or submitting. Read-only.\n\nApplies the same gates as the real confidential withdraw, in the same\norder: `to` is required (400 without it), then the policy decision over\nthe same canonical op (403 when frozen or denied), then the upstream\nquote. A wallet whose policy requires approval still gets its quote —\nthe op is executable once approvers sign.\n",
         "requestBody": {
           "required": true,
           "content": {
@@ -1342,6 +1342,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -3867,7 +3870,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "Present when `would_succeed` is false. One of: `wallet_frozen`, `policy_denied`, `storage_not_registered` (wNEAR/NEP-141 recipient has no token storage), `recipient_not_found` (native NEAR to a non-existent named account — would burn the wNEAR)."
+            "description": "Present when `would_succeed` is false. One of: `wallet_frozen`, `policy_denied`, `storage_not_registered` (wNEAR/NEP-141 recipient has no token storage), `recipient_not_found` (native NEAR to a non-existent named account — would burn the wNEAR), `insufficient_balance` (intents balance below the requested amount), `invalid_request` (body the real withdraw would reject with a 400), `bridge_rejected` (1Click refused the cross-chain quote — below the bridge minimum, unsupported route or no liquidity; `message` carries 1Click's own text, e.g. \"Amount is too low for bridge, try at least 303064\")."
           },
           "message": {
             "type": "string"
