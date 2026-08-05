@@ -1049,9 +1049,12 @@ paths:
         as `intentsWithdraw` is enforced. Async — poll
         `GET /wallet/v1/requests/{id}`.
 
-        **Delivery to a NEAR named account via `DESTINATION_CHAIN` lands an
-        `mt_balance` credit on `intents.near` (NEP-245), not a direct FT
-        balance** — see CUSTODY docs.
+        **Delivery to a NEAR account is a direct NEP-141 `ft_transfer`** to the
+        recipient (not an intents-balance credit). The recipient does NOT need
+        prior storage registration on the token contract: 1Click checks it and,
+        for an unregistered recipient, registers the storage itself, netting
+        its cost out of `amount_out` (observable in the dry-run quote — an
+        unregistered recipient is quoted slightly less than a registered one).
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
