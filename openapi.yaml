@@ -1027,13 +1027,22 @@ paths:
         never appears on chain — only the destination-chain receiver does, on the
         destination chain.
 
-        `chain="near"` is supported and delivers **native NEAR** to the named
-        NEAR account: 1Click runs a `native_withdraw` intent on `intents.near`
-        that unwraps the wNEAR and sends native NEAR directly to the recipient's
-        wallet (verified live: settlement
-        `FVzan8XRMwHYPe2hgX4GffwG3bdndxETWb2FKVFzFdur`). To send funds back to
-        your **own** public intents balance use `confidentialUnshield` (different
-        semantics — self vs. external recipient).
+        `chain` must be either the token's **home chain** (e.g. `chain=zcash`
+        for `nep141:zec.omft.near`, delivering the native asset to a
+        destination-chain address) or `"near"`; any other combination is
+        rejected with 400 — the destination is derived from the token, so a
+        mismatched `chain` would describe a withdrawal that cannot happen.
+
+        `chain="near"` delivers to the named NEAR account. For NEAR-native
+        tokens (`nep141:wrap.near` → **native NEAR** via a `native_withdraw`
+        intent on `intents.near`, verified live: settlement
+        `FVzan8XRMwHYPe2hgX4GffwG3bdndxETWb2FKVFzFdur`). For omft bridge
+        assets (e.g. `nep141:zec.omft.near`) the NEP-141 representation is
+        delivered **on NEAR** (`1cs_v1:near:<asset>` destination) — the funds
+        stay bridged instead of being withdrawn to the token's home chain. To
+        send funds back to your **own** public intents balance use
+        `confidentialUnshield` (different semantics — self vs. external
+        recipient).
 
         `token` is **required** — the source confidential asset to deliver on the
         destination chain. The same per-chain whitelist / spending-limit policy
@@ -4356,10 +4365,12 @@ components:
     ConfidentialWithdrawRequest:
       description: >-
         Confidential withdraw body — same shape as `WithdrawRequest`; `token`
-        is required (the source confidential asset to deliver). `chain="near"`
-        is supported and delivers native NEAR via `intents.near native_withdraw`
-        (use `confidentialUnshield` if you want to send to your own public
-        balance instead).
+        is required (the source confidential asset to deliver). `chain` must be
+        the token's home chain or `"near"` (mismatches are rejected).
+        `chain="near"` delivers native NEAR for `nep141:wrap.near` (via
+        `intents.near native_withdraw`) and the NEP-141 token on NEAR for omft
+        bridge assets (use `confidentialUnshield` if you want to send to your
+        own public balance instead).
       allOf:
         - $ref: '#/components/schemas/WithdrawRequest'
     ConfidentialSwapRequest:
