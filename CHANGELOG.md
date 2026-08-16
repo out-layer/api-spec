@@ -4,7 +4,40 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+### Added
+
+- **Execution** (`POST /call/{owner}/{project}`, `GET /calls/{call_id}`) — the
+  route every project is reached through, connectors included. Documents the
+  universal `operation` field a connector must name inside `input` (the one
+  value the contract prices, the coordinator bills, the worker refuses to run
+  without and the guest dispatches on), the `X-Use-Owner-Secret` switch, and
+  the choice between waiting and polling: `"async": true` returns at once with
+  `call_id` + `poll_url` and has **no window at all**, which is where long work
+  belongs.
+- **Subscriptions and payment keys** — `POST /wallet/v1/create-payment-key`
+  (including the keyless AGENT key, one per wallet, with no plaintext in the
+  response), `GET /wallet/v1/subscription/purchase-info`, and
+  `GET /subscription/status` with the allowance, the balance and the connectors
+  in scope.
+- **A secret left for an agent** — `GET /wallet/v1/agent-secret/pubkey`,
+  `POST /wallet/v1/agent-secret` (the agent's wallet pays) and
+  `POST /wallet/v1/agent-secret/prepare` (a call for a named payer to send, the
+  signature bound to them).
+- **`PaymentKeyAuth`** security scheme (`X-Payment-Key: {owner}:{nonce}:{key}`),
+  which most of these routes accept alongside `Bearer wk_`.
+
 ### Changed
+
+- **A synchronous call that outruns its window now answers `408`**, carrying
+  `call_id`, `reason: "timeout"` and a `poll_url`, instead of `500`. The outcome
+  is settled, not a fault of ours — and a `500` invites the one wrong move,
+  since the original may still be running and be charged, so a retry buys a
+  second charge for one piece of work.
+- **`POST /wallet/v1/create-payment-key`** distinguishes its failures: `402`
+  when the wallet is short (naming what it holds, what is needed and where to
+  send it), `400` for an amount no account could hold, and `503` when the
+  balance could not be READ — which is not the same as a balance of zero, and
+  used to be reported as one.
 
 - **`ConfidentialOpResponse`** — documented the settled `result.swap_details`
   block on the request row (`intentHashes`, `nearTxHashes`,

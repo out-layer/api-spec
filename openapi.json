@@ -31,6 +31,14 @@
       "description": "Create a new wallet and obtain an API key."
     },
     {
+      "name": "Execution",
+      "description": "Run a project. A connector is an ordinary project we curated and priced, reached through the same route; what being one adds — an `operation` it must name, a price it must pay, an owner's secret it may ask for — is decided from the project id, not from the way in. Synchronous by default; send `async` and poll for anything longer than a few seconds."
+    },
+    {
+      "name": "Subscriptions",
+      "description": "Payment keys, the allowance a subscription buys, and the secret an owner leaves for their agent. Only money pays a connector's author: a call covered by an allowance costs the caller nothing at the moment of the call, so nothing passes through."
+    },
+    {
       "name": "Wallet",
       "description": "Multi-chain custody operations — transfer, withdraw, swap, balance, and signing, including NEAR (NEP-413) message signing and off-chain EVM signing (EIP-712 typed data, EIP-191 personal_sign, and client-serialized raw transactions)."
     },
@@ -2918,6 +2926,401 @@
           }
         }
       }
+    },
+    "/call/{owner}/{project}": {
+      "post": {
+        "tags": [
+          "Execution"
+        ],
+        "operationId": "callProject",
+        "summary": "Run a project, or a connector",
+        "description": "One route for every project. A **connector** is an ordinary project we\ncurated and priced; what being one adds is decided from the project id,\nnot from the way in.\n\nA connector call MUST name its operation as a top-level `operation`\nstring inside `input`. The same bytes are read by four parties — the\ncontract prices the call, the coordinator bills it, the worker refuses\nto run without it, and the guest dispatches on it — so there is one\nvalue and nothing to keep in step. Absent, blank, non-string, nested, or\nspelled `op` are all refused before anything runs, and an operation with\nno on-chain price is refused too: unpriced is not free.\n\n**Waiting.** Synchronous by default: the connection is held until the\nrun finishes or the server's window elapses. Send `\"async\": true` for\nanything longer — it returns at once with `call_id` and `poll_url`, and\nthat path has no window at all. A synchronous call that outruns the\nwindow is settled, not suspended: `408`, charged for the compute\nauthorised and never for the operation. Do not retry it — the original\nmay still be running and will be charged.\n",
+        "security": [
+          {
+            "PaymentKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Project owner account, e.g. `connectors.outlayer.near`."
+          },
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Use-Owner-Secret",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "true"
+              ]
+            },
+            "description": "Fetch the secret stored for this agent and inject it into the run.\nNothing is looked up unless the call asks. Only meaningful for a key\nowned by a custody wallet; an ordinary payment key addresses its own\nsecrets through the body.\n"
+          },
+          {
+            "name": "X-Attached-Deposit",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Stablecoin minimal units paid to the project's owner. Refused for connectors."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCallRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The run finished, or was accepted for polling when `async`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectCallResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "description": "The key cannot pay for this call."
+          },
+          "403": {
+            "description": "The key's scope does not include this project."
+          },
+          "408": {
+            "description": "The call did not finish inside the synchronous window and has been\nsettled as failed. Terminal — send it as `async` and poll instead.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallTimedOut"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit, concurrency cap, or the wallet's daily connector quota."
+          }
+        }
+      }
+    },
+    "/calls/{call_id}": {
+      "get": {
+        "tags": [
+          "Execution"
+        ],
+        "operationId": "getCallResult",
+        "summary": "Poll an asynchronous call",
+        "security": [
+          {
+            "PaymentKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "call_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The call's current state. `status` is `pending` until it settles.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectCallResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/wallet/v1/create-payment-key": {
+      "post": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "operationId": "createPaymentKey",
+        "summary": "Create a payment key for this wallet",
+        "description": "Two transactions on chain: the key's secret is stored, then funded. An\n**agent** key is keyless — it is named after the wallet itself, so the\nresponse carries no `payment_key` to hand out, and a wallet may have\nexactly one.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePaymentKeyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatePaymentKeyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The amount is not one an account can hold."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "description": "The wallet holds less than the deposit asks for. The message names\nwhat it holds, what is needed, and where to send it.\n"
+          },
+          "503": {
+            "description": "The wallet's balance could not be read, so nothing was attempted and\nnothing was charged. Transient — retry.\n"
+          }
+        }
+      }
+    },
+    "/wallet/v1/subscription/purchase-info": {
+      "get": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "operationId": "subscriptionPurchaseInfo",
+        "summary": "What is on sale, and what this wallet needs to buy it",
+        "responses": {
+          "200": {
+            "description": "The plans on chain joined with their terms. An empty list means one\nhalf is missing — a plan is sellable only when both exist.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/subscription/status": {
+      "get": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "operationId": "subscriptionStatus",
+        "summary": "A key's allowance, balance, and the connectors in its scope",
+        "security": [
+          {
+            "PaymentKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`allowance_*` describe a subscription; `balance` and `withdrawable`\ndescribe money. A call covered by an allowance costs the caller\nnothing at the moment of the call — and pays the connector's author\nnothing either.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/wallet/v1/agent-secret/pubkey": {
+      "get": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "operationId": "agentSecretPubkey",
+        "summary": "The key to seal a secret for this agent",
+        "description": "Encrypt on your own machine and send back only ciphertext — the\ncredential never exists in this process. The answer names the seed and\nthe agent so a mismatch is visible rather than silent.\n",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "X25519 public key (hex), encrypt-only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSecretPubkey"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/wallet/v1/agent-secret": {
+      "post": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "operationId": "storeAgentSecret",
+        "summary": "Store a secret for this agent, the agent's wallet paying",
+        "description": "The agent's own wallet signs and stakes the storage, so it needs about\n0.11 NEAR. With none, the answer says so and names the endpoint that\npays instead.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "project_id",
+                  "encrypted_secrets_base64"
+                ],
+                "properties": {
+                  "project_id": {
+                    "type": "string"
+                  },
+                  "encrypted_secrets_base64": {
+                    "type": "string",
+                    "description": "Sealed to the key from `/agent-secret/pubkey`. Never a plaintext secret."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tx_hash": {
+                      "type": "string"
+                    },
+                    "agent_account": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "description": "The agent's wallet cannot pay the storage deposit."
+          }
+        }
+      }
+    },
+    "/wallet/v1/agent-secret/prepare": {
+      "post": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "operationId": "prepareAgentSecret",
+        "summary": "The same store, as a call for the payer to send",
+        "description": "The keystore only signs; the call comes back for `payer` to send from\ntheir own account, so the agent's wallet needs no NEAR at all. The\nsignature binds every argument that decides what is stored, who may read\nit and who pays — including the payer, so handing the prepared call to\nsomebody else is a refusal rather than a shortcut.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "project_id",
+                  "encrypted_secrets_base64",
+                  "payer"
+                ],
+                "properties": {
+                  "project_id": {
+                    "type": "string"
+                  },
+                  "encrypted_secrets_base64": {
+                    "type": "string"
+                  },
+                  "payer": {
+                    "type": "string",
+                    "description": "The account that will send the transaction and stake the storage."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A `store_secrets_for` call, complete with the wallet's signature.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreparedAgentSecret"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "description": "The ciphertext did not decrypt under this agent's seed, so nothing\nwas signed. Encrypt with the key from `/agent-secret/pubkey` for\nthis exact project.\n"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2927,6 +3330,12 @@
         "scheme": "bearer",
         "bearerFormat": "wk_<32-hex-chars>",
         "description": "API key returned by `POST /register`. Format `wk_<hex>`. Pass as\n`Authorization: Bearer wk_...`.\n"
+      },
+      "PaymentKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Payment-Key",
+        "description": "A payment key, `{owner}:{nonce}:{secret}`. Created by\n`POST /wallet/v1/create-payment-key` and funded on chain. An AGENT key\nhas no secret to present — it is named after its wallet, and that\nwallet's `Authorization: Bearer wk_...` stands for it.\n"
       }
     },
     "parameters": {
@@ -3157,6 +3566,319 @@
       }
     },
     "schemas": {
+      "ProjectCallRequest": {
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "description": "The project's own input. A CONNECTOR additionally requires a\ntop-level `operation` string here — the one field every connector\nuses, read by the contract, the coordinator, the worker and the\nguest alike.\n",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "description": "Required for connectors. `op` is not accepted."
+              }
+            }
+          },
+          "async": {
+            "type": "boolean",
+            "default": false,
+            "description": "Return at once with `call_id` and `poll_url` instead of holding the\nconnection. No window applies on this path — long work belongs here.\n"
+          },
+          "version_key": {
+            "type": "string",
+            "description": "Pin a specific published version instead of the active one."
+          },
+          "secrets_ref": {
+            "type": "object",
+            "properties": {
+              "profile": {
+                "type": "string"
+              },
+              "account_id": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ProjectCallResponse": {
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "completed",
+              "failed"
+            ]
+          },
+          "output": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "compute_cost": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stablecoin minimal units, compute only — the operation's fee is separate."
+          },
+          "instructions": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "time_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "poll_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Present when the call was accepted for polling."
+          },
+          "attestation_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The TEE quote for this execution."
+          }
+        }
+      },
+      "CallTimedOut": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "timeout"
+            ]
+          },
+          "call_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "poll_url": {
+            "type": "string"
+          }
+        }
+      },
+      "CreatePaymentKeyRequest": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "boolean",
+            "default": false,
+            "description": "A keyless key, named after the wallet itself. One per wallet, and it\ncannot be deleted.\n"
+          },
+          "initial_deposit_usdc": {
+            "type": "string",
+            "description": "Dollars, e.g. `\"1.00\"`. Mutually exclusive with `initial_deposit_near`."
+          },
+          "initial_deposit_near": {
+            "type": "string",
+            "description": "NEAR, swapped to the stablecoin through Intents — mainnet only.\n"
+          },
+          "project_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The scope, fixed at creation. `owner/*` allows a whole namespace.\n"
+          },
+          "max_per_call": {
+            "type": "string",
+            "description": "Dollars. `\"0\"` or absent means no limit."
+          }
+        }
+      },
+      "CreatePaymentKeyResponse": {
+        "type": "object",
+        "properties": {
+          "nonce": {
+            "type": "integer"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "payment_key": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Shown once, and ONLY for an ordinary key. An agent key has no\nplaintext to hand over.\n"
+          },
+          "store_secrets_tx": {
+            "type": "string"
+          },
+          "top_up_tx": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SubscriptionStatus": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string"
+          },
+          "nonce": {
+            "type": "integer"
+          },
+          "has_subscription": {
+            "type": "boolean"
+          },
+          "is_agent": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expired": {
+            "type": "boolean"
+          },
+          "allowance_total_usd": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "allowance_spent_usd": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "allowance_available_usd": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "balance": {
+            "type": "string",
+            "description": "Money on the key. Nets out anything currently reserved by a call in flight."
+          },
+          "withdrawable": {
+            "type": "string"
+          },
+          "connector_namespace": {
+            "type": "string"
+          },
+          "connectors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "connector_id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "project_id": {
+                  "type": "string"
+                },
+                "operations": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "operation": {
+                        "type": "string"
+                      },
+                      "price_usd": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "connectors_in_scope": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AgentSecretPubkey": {
+        "type": "object",
+        "properties": {
+          "pubkey": {
+            "type": "string",
+            "description": "X25519 public key, hex. Encrypt-only."
+          },
+          "seed": {
+            "type": "string",
+            "description": "`project:{project_id}:{agent_account}` — returned so a mismatch is\nvisible rather than silent.\n"
+          },
+          "agent_account": {
+            "type": "string",
+            "description": "The secret's name AND its owner."
+          }
+        }
+      },
+      "PreparedAgentSecret": {
+        "type": "object",
+        "properties": {
+          "contract_id": {
+            "type": "string"
+          },
+          "method_name": {
+            "type": "string",
+            "enum": [
+              "store_secrets_for"
+            ]
+          },
+          "args": {
+            "type": "object",
+            "description": "Complete arguments, including the agent wallet's signature."
+          },
+          "deposit": {
+            "type": "string",
+            "description": "yoctoNEAR; the contract refunds the excess."
+          },
+          "gas": {
+            "type": "string"
+          },
+          "agent_account": {
+            "type": "string"
+          }
+        }
+      },
       "Chain": {
         "type": "string",
         "enum": [
