@@ -2616,7 +2616,7 @@ paths:
                   description: The account that will send the transaction and stake the storage.
       responses:
         '200':
-          description: A `store_secrets_for` call, complete with the wallet's signature.
+          description: A `store_agent_secret` call, complete with the wallet's signature.
           content:
             application/json:
               schema:
@@ -2947,7 +2947,7 @@ components:
       type: object
       properties:
         contract_id: { type: string }
-        method_name: { type: string, enum: [store_secrets_for] }
+        method_name: { type: string, enum: [store_agent_secret] }
         args:
           type: object
           description: Complete arguments, including the agent wallet's signature.

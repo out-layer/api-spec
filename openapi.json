@@ -3304,7 +3304,7 @@
         },
         "responses": {
           "200": {
-            "description": "A `store_secrets_for` call, complete with the wallet's signature.",
+            "description": "A `store_agent_secret` call, complete with the wallet's signature.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3860,7 +3860,7 @@
           "method_name": {
             "type": "string",
             "enum": [
-              "store_secrets_for"
+              "store_agent_secret"
             ]
           },
           "args": {
