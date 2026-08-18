@@ -2629,7 +2629,7 @@
         ],
         "operationId": "signPolicy",
         "summary": "Sign an encrypted policy (for on-chain submission)",
-        "description": "The keystore signs `SHA256(encrypted_data)` with the wallet's key. The\nsignature + encrypted data + public key form the payload for the\non-chain `store_wallet_policy(...)` call.\n",
+        "description": "The keystore signs the message the contract rebuilds —\n`store_wallet_policy:v1:{wallet_pubkey}:{len}:{encrypted_data}:{caller}` —\nwith the wallet's key. The signature + encrypted data + public key form\nthe payload for the on-chain `store_wallet_policy(...)` call.\n\n`caller` is the account that will SEND that call, and it is signed: the\nanswer works for that account and no other. Sending the prepared payload\nfrom anywhere else is refused on chain.\n",
         "requestBody": {
           "required": true,
           "content": {
@@ -3025,7 +3025,36 @@
             }
           },
           "429": {
-            "description": "Rate limit, concurrency cap, or the wallet's daily connector quota."
+            "description": "Three different refusals share this status, and a caller tells them\napart by `reason` rather than by the code:\n\n* `call_already_in_flight` — an ALLOWANCE runs one call at a time.\n  **`terminal: false`**: it clears by itself when the call in flight\n  finishes, so the move is to wait, or to fund the key (money is not\n  limited this way, and a funded key answers both at once);\n* `connector_quota_exceeded` — the wallet's daily connector quota,\n  which widens with the wallet's age and is independent of paying;\n* a plain rate limit, with no `reason`.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "call_already_in_flight",
+                        "connector_quota_exceeded"
+                      ]
+                    },
+                    "terminal": {
+                      "type": "boolean",
+                      "description": "False means waiting clears it; true means it will not."
+                    },
+                    "used": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -3168,7 +3197,293 @@
             }
           },
           "401": {
+            "description": "No credential, or — with a `wk_` — a wallet that has no agent key\nyet, which answers `Missing X-Payment-Key header`. That is the reply\nto \"which key of yours should I report on\", not a rejected `wk_`:\ncreate the agent key with `create-payment-key {\"agent\": true}`.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/subscription/purchase": {
+      "post": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "operationId": "purchaseAllowance",
+        "summary": "Turn balance already on a key into allowance",
+        "description": "Buys a plan out of the key's own balance. Needs a key STRING, so it is\nfor ordinary payment keys: an agent's key has none — it is named after\nthe wallet — and an agent's subscription is bought on chain instead,\nwith an `ft_transfer_call` carrying\n`{\"action\":\"buy_subscription\",\"nonce\":N,\"owner\":\"<agent>\",\"plan\":0}`.\n\nOnly the plan's PRICE is spent; an overpayment stays on the key as\nbalance. The allowance ADDS to whatever is there and validity extends\nfrom `max(now, expires_at)`, so buying again never shortens what is\nalready paid for.\n\nA `wk_` is deliberately NOT accepted here: it is a read credential, and\nspending on the owner's behalf is not something a compromised agent\nshould be able to do.\n",
+        "security": [
+          {
+            "PaymentKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "amount_usd"
+                ],
+                "properties": {
+                  "amount_usd": {
+                    "type": "string",
+                    "description": "Stablecoin minimal units, as an integer string. `10000000`\nis $10.00.\n"
+                  },
+                  "plan": {
+                    "type": "integer",
+                    "description": "Which plan, by index — the same identifier an on-chain\npurchase names. Absent means the cheapest on sale. A payment\nshort of the named plan buys the best plan it does cover.\n"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The plan sold, which is not always the one asked for.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "plan": {
+                      "type": "string"
+                    },
+                    "allowance_purchased_usd": {
+                      "type": "string"
+                    },
+                    "allowance_total_usd": {
+                      "type": "string"
+                    },
+                    "spent_usd": {
+                      "type": "string",
+                      "description": "The PLAN'S price, not the whole `amount_usd`."
+                    },
+                    "expires_at": {
+                      "type": "string"
+                    },
+                    "days_added": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "description": "The key's balance does not cover the cheapest plan on sale."
+          }
+        }
+      }
+    },
+    "/subscription/notifications": {
+      "put": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "operationId": "setSubscriptionNotifications",
+        "summary": "Where to warn the owner about the allowance and the expiry",
+        "description": "Either channel, or both; `null` clears one. Never defaulted to an\naddress the owner did not choose — a warning nobody reads is worse than\nno warning.\n\nPERSONAL DATA: the address is stored against the key.\n",
+        "security": [
+          {
+            "PaymentKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "webhook_url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "What is stored now.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "email": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "webhook_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/trial-key": {
+      "post": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "operationId": "claimTrialKey",
+        "summary": "Claim this wallet's one trial key",
+        "description": "A real payment key, granted rather than sold, and spent exactly like any\nother — same header, same balance endpoint, same refusals.\n\nWhat makes it a trial: its value is an ALLOWANCE (never withdrawable, it\nends at its expiry), it is a GRANT (it cannot pay a developer through\n`X-Attached-Deposit`), and it is SCOPED to the curated connector\nnamespace, so it cannot run arbitrary code at our expense. It carries no\nwallet, so a trial call gets no custody host functions.\n\nOne per wallet, claimable within a window after the wallet is created;\nthe window, the days and the allowance are operator settings, and the\nanswer states the ones it granted. There is also a per-IP cap.\n\n**The key string is shown once and cannot be re-issued.**\n",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The claimed key and its terms.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "payment_key": {
+                      "type": "string",
+                      "description": "The whole `X-Payment-Key` header value. Shown once."
+                    },
+                    "owner": {
+                      "type": "string"
+                    },
+                    "nonce": {
+                      "type": "integer"
+                    },
+                    "allowance_usd": {
+                      "type": "string"
+                    },
+                    "days": {
+                      "type": "integer"
+                    },
+                    "project_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Anything else is refused as `project_not_allowed`."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "Already claimed, or claimed too late for this wallet's age."
+          }
+        }
+      }
+    },
+    "/public/payment-keys/{owner}/{nonce}/balance": {
+      "get": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "operationId": "publicPaymentKeyBalance",
+        "summary": "What a key has spent and what is left, without presenting it",
+        "description": "Addressed by owner and nonce rather than by the key itself, so a\ndashboard can show a key's balance without holding its string. It\nreports MONEY only — allowance and expiry need the key, through\n`/subscription/status`.\n",
+        "security": [],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nonce",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Money on the key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "owner": {
+                      "type": "string"
+                    },
+                    "nonce": {
+                      "type": "integer"
+                    },
+                    "initial_balance": {
+                      "type": "string"
+                    },
+                    "spent": {
+                      "type": "string"
+                    },
+                    "reserved": {
+                      "type": "string"
+                    },
+                    "available": {
+                      "type": "string"
+                    },
+                    "last_used_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such key."
           }
         }
       }
@@ -3180,12 +3495,20 @@
         ],
         "operationId": "agentSecretPubkey",
         "summary": "The key to seal a secret for this agent",
-        "description": "Encrypt on your own machine and send back only ciphertext — the\ncredential never exists in this process. The answer names the seed and\nthe agent so a mismatch is visible rather than silent.\n",
+        "description": "Encrypt on your own machine and send back only ciphertext — the\ncredential never exists in this process. The answer names the seed and\nthe agent so a mismatch is visible rather than silent.\n\nGive exactly ONE of `project_id` and `wasm_hash`. A project secret is\nreadable by every version of that project; a `wasm_hash` secret is\nreadable only by that exact build, and a rebuild that changes a byte\ncannot open it. They seal to different seeds, so the choice made here\nmust be the one made when storing.\n",
         "parameters": [
           {
             "name": "project_id",
             "in": "query",
-            "required": true,
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wasm_hash",
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -3223,12 +3546,16 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "project_id",
                   "encrypted_secrets_base64"
                 ],
                 "properties": {
                   "project_id": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Exactly one of this and `wasm_hash`."
+                  },
+                  "wasm_hash": {
+                    "type": "string",
+                    "description": "One exact build instead of a project."
                   },
                   "encrypted_secrets_base64": {
                     "type": "string",
@@ -3282,13 +3609,17 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "project_id",
                   "encrypted_secrets_base64",
                   "payer"
                 ],
                 "properties": {
                   "project_id": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Exactly one of this and `wasm_hash`."
+                  },
+                  "wasm_hash": {
+                    "type": "string",
+                    "description": "One exact build instead of a project."
                   },
                   "encrypted_secrets_base64": {
                     "type": "string"
@@ -3318,6 +3649,61 @@
           },
           "503": {
             "description": "The ciphertext did not decrypt under this agent's seed, so nothing\nwas signed. Encrypt with the key from `/agent-secret/pubkey` for\nthis exact project.\n"
+          }
+        }
+      }
+    },
+    "/wallet/v1/agent-secret/delete/prepare": {
+      "post": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "operationId": "prepareAgentSecretDelete",
+        "summary": "Remove the agent's secret, as a call for the payer to send",
+        "description": "The mirror of `/agent-secret/prepare`: the keystore signs, `payer` sends\nthe call from their own account, and the storage deposit goes back to\nwhoever sends it. The agent needs no NEAR to be forgotten.\n\nAuthority is the `wk_`, not the NEAR account paying. The agent's key\nnever moves — it IS the agent's account — so a rotated credential still\nspeaks for the agent, and a wallet whose seed is lost cannot delete its\nsecrets at all.\n\nSigned under its OWN domain, so a signature obtained to store a secret\ncannot be presented to destroy one.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "payer"
+                ],
+                "properties": {
+                  "project_id": {
+                    "type": "string",
+                    "description": "Exactly one of this and `wasm_hash`."
+                  },
+                  "wasm_hash": {
+                    "type": "string",
+                    "description": "One exact build instead of a project."
+                  },
+                  "payer": {
+                    "type": "string",
+                    "description": "The account that will send the transaction, and the one the\nstorage deposit returns to.\n"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A `delete_agent_secret` call, complete with the wallet's signature.\nNo deposit field: the method is not payable, and attaching anything\nis refused before the contract sees it.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreparedAgentSecretDelete"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           }
         }
       }
@@ -3870,6 +4256,30 @@
           "deposit": {
             "type": "string",
             "description": "yoctoNEAR; the contract refunds the excess."
+          },
+          "gas": {
+            "type": "string"
+          },
+          "agent_account": {
+            "type": "string"
+          }
+        }
+      },
+      "PreparedAgentSecretDelete": {
+        "type": "object",
+        "properties": {
+          "contract_id": {
+            "type": "string"
+          },
+          "method_name": {
+            "type": "string",
+            "enum": [
+              "delete_agent_secret"
+            ]
+          },
+          "args": {
+            "type": "object",
+            "description": "Complete arguments, including the agent wallet's signature."
           },
           "gas": {
             "type": "string"
@@ -5884,11 +6294,16 @@
       "SignPolicyRequest": {
         "type": "object",
         "required": [
-          "encrypted_data"
+          "encrypted_data",
+          "caller"
         ],
         "properties": {
           "encrypted_data": {
             "type": "string"
+          },
+          "caller": {
+            "type": "string",
+            "description": "The NEAR account that will send `store_wallet_policy`. Signed, so\nthe signature is usable by that account only.\n"
           }
         }
       },
