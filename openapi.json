@@ -155,7 +155,7 @@
         ],
         "operationId": "getAddress",
         "summary": "Derive wallet address for a chain",
-        "description": "Returns the deterministically-derived address for the wallet on the\nrequested chain. Same `wallet_id` always produces the same addresses\nacross chains.\n",
+        "description": "Returns the deterministically-derived address for the wallet on the\nrequested chain. Same `wallet_id` always produces the same addresses\nacross chains.\n\nFor `chain=near` the response also carries the two Agent Connect\nidentities: `executor_account_id` (always equal to `address` — the\nwallet's implicit account, which signs and pays gas) and\n`asset_account_id` (the bound named account, `null` when the wallet\nhas no binding). They are separate fields on purpose: product balances\nbelong to the asset account, while signing, predecessor checks and gas\nkey off the executor.\n",
         "parameters": [
           {
             "name": "chain",
@@ -179,7 +179,9 @@
                   "chain": "near",
                   "address": "9c3c9e101c1f4f5e9c4a1d7b9a8f3c20",
                   "public_key": "ed25519:7BcBZ9Z...",
-                  "vault_id": null
+                  "vault_id": null,
+                  "asset_account_id": "agent.tla",
+                  "executor_account_id": "9c3c9e101c1f4f5e9c4a1d7b9a8f3c20"
                 }
               }
             }
@@ -203,7 +205,7 @@
         ],
         "operationId": "getBalance",
         "summary": "Read balance",
-        "description": "Returns the balance for a token on the requested chain. Currently only\n`chain=near` is supported for native balance reads; cross-chain balances\nshould be read from the upstream chain directly.\n\nSet `source=intents` to read the wallet's intents.near balance\n(`mt_balance_of`) instead of the on-chain account balance.\n",
+        "description": "Returns the balance for a token on the requested chain. Currently only\n`chain=near` is supported for native balance reads; cross-chain balances\nshould be read from the upstream chain directly.\n\nSet `source=intents` to read the wallet's intents.near balance\n(`mt_balance_of`) instead of the on-chain account balance.\n\nThis endpoint always answers for the WALLET'S OWN account (the\nexecutor), bound or not — its meaning never changes when a binding is\nadded. The bound asset account has its own endpoint,\n`GET /wallet/v1/binding/balance`.\n\nThe rule for both sides of the API is one sentence: everything under\n`/wallet/v1/binding/` is the bound account, everything else is the\nwallet itself. `/wallet/v1/transfer` moves the wallet's own funds;\n`/wallet/v1/binding/transfer` moves the bound account's.\n\n`source=intents` belongs here and only here: an intents.near deposit is\ncredited to whoever signed it, which is always the executor, so the\nbound account has no intents balance and never will.\n\nThe response names the identity it describes in `account`, which for\nthis endpoint is always `executor`.\n",
         "parameters": [
           {
             "name": "chain",
@@ -248,7 +250,8 @@
                 "example": {
                   "balance": "1000000000000000000000000",
                   "token": "NEAR",
-                  "account_id": "9c3c9e101c1f4f5e9c4a1d7b9a8f3c20"
+                  "account_id": "9c3c9e101c1f4f5e9c4a1d7b9a8f3c20",
+                  "account": "executor"
                 }
               }
             }
@@ -293,6 +296,495 @@
         }
       }
     },
+    "/wallet/v1/binding": {
+      "put": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "putBinding",
+        "summary": "Register the account this wallet operates",
+        "description": "Records the one-to-one binding between this custody wallet and an\non-chain account, in one of two mutually exclusive modes (`kind`):\n\n* `hos_lease` (default) — a leased, keyless asset account\n  (e.g. `agent.tla`). `impl_version` is REQUIRED and gated against\n  the supported registry; `owner_account_id` is required.\n* `personal_account` — the caller's own named account\n  (e.g. `user.near`) with the upstream no-sign wallet contract the\n  owner installs personally (see `GET /wallet/v1/binding/setup`).\n  `impl_version` is REJECTED — this mode is versioned by the\n  account's wasm code hash, which the client never declares.\n  `owner_account_id` is optional and must equal `asset_account_id`.\n\nThe response returns `executor_account_id` — the identity to register\nin the account's extension set (and, for `hos_lease`, to provision a\nspend grant for).\n\nGuarantees: binding is one-to-one, and a second call naming a\nDIFFERENT asset account is rejected rather than silently rebinding\n(re-PUTting the same pair in the same mode is idempotent). An\nunsupported `impl_version` is rejected here, at binding time, not at\nfirst execution — that refusal is terminal, do not retry.\n\nThe binding itself authorizes nothing: `binding_status` stays `pending`\nuntil the executor is first observed live in the extension set on\nchain, and nothing can be executed against the account until its owner\n(for `hos_lease`, the partner's provisioning) puts the executor there.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutBindingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Binding recorded (or the identical existing binding)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "The wallet or the asset account is already bound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "getBinding",
+        "summary": "Read the wallet's binding",
+        "description": "Returns the binding record, refreshed against the chain\n(`hos_agent_status` + `nft_item_info`), or 404 when the wallet has\nnone. `binding_status` reflects OutLayer's view only — it does not\nattest that the executor is still in the control set, which can change\nwithout OutLayer being told. `gas_balance` is the executor's native\nNEAR in yoctoNEAR, so it can be topped up before a call fails rather\nthan after.\n",
+        "responses": {
+          "200": {
+            "description": "The binding record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "The wallet has no binding",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "deleteBinding",
+        "summary": "End the binding",
+        "description": "Ends the binding (revocation, transfer, sale, recovery, lease expiry).\nIdempotent — deleting a wallet with no binding is a success. Pending\nmultisig approvals whose operation targets the asset account are\ncancelled rather than left completable; the wallet itself survives,\nonly the binding ends.\n",
+        "responses": {
+          "200": {
+            "description": "The binding is ended (or there was none)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteBindingResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/wallet/v1/binding/events": {
+      "post": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "postBindingEvent",
+        "summary": "Notify OutLayer that a bound account changed",
+        "description": "For the account provider (House of Stake) to call on revoke, transfer,\nrecovery, freeze or lease change. Authorized by a shared secret in\n`X-Binding-Webhook-Secret`; answers `503` where no secret is\nconfigured.\n\n**The body is a hint, not an instruction.** A `revoked` event revokes\nnothing: OutLayer drops its cached view of the account and re-reads the\nchain, and the chain decides the resulting `binding_status`. A webhook\nis an assertion about somebody else's account, so a leaked or\nmisconfigured secret must not become the ability to disable an agent by\nname.\n\nThe endpoint is therefore an accelerator with no authority, and it is\noptional: without it, a change is noticed within seconds anyway,\nbecause every signing pre-flight reads the chain. Skipping it costs\nlatency, never correctness.\n\nAnswers `200` with `binding_status: unbound` for an account OutLayer\ndoes not operate, so an unknown account does not accumulate in a retry\nqueue.\n",
+        "security": [],
+        "parameters": [
+          {
+            "name": "X-Binding-Webhook-Secret",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "asset_account_id"
+                ],
+                "properties": {
+                  "asset_account_id": {
+                    "type": "string",
+                    "description": "The account the news is about."
+                  },
+                  "event": {
+                    "type": "string",
+                    "description": "What happened, in the sender's words (`revoked`, `transferred`, `recovered`, `frozen`, …). Logged for correlation; never acted on."
+                  }
+                }
+              },
+              "example": {
+                "asset_account_id": "agent.tla",
+                "event": "revoked"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Re-read; the status the chain now implies",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "binding_status"
+                  ],
+                  "properties": {
+                    "binding_status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "active",
+                        "suspended",
+                        "revoked",
+                        "unbound"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "description": "No binding-event secret is configured on this deployment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "getBindingZones",
+        "summary": "Which account names this webhook may report on",
+        "description": "The account-name suffixes `POST /wallet/v1/binding/events` accepts,\nread with the same `X-Binding-Webhook-Secret`. Ask before sending the\nfirst event for a newly opened zone: an account outside the list\nanswers `binding_status: unbound` and nothing happens.\n\nAn EMPTY list means no zone restriction — every name is accepted,\nsubject to the rule that always applies (only leased bindings are\nreachable at all). Zones are editable by OutLayer without a restart, so\na new one takes effect as soon as it is added.\n",
+        "security": [],
+        "parameters": [
+          {
+            "name": "X-Binding-Webhook-Secret",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The zones currently accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "zones"
+                  ],
+                  "properties": {
+                    "zones": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "zones": [
+                    "tla.near"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "description": "No binding-event secret is configured on this deployment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/wallet/v1/binding/balance": {
+      "get": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "getBindingBalance",
+        "summary": "Read the BOUND account's balance",
+        "description": "The balance of the account this wallet is bound to — where an Agent\nConnect wallet's product money lives. The wallet's own account (gas,\nand anything it holds itself) is `GET /wallet/v1/balance`.\n\nRequires an ACTIVE binding. A `pending` one answers 400 saying so: it\nauthorizes nothing, and the executor is not in the account's extension\nset yet, so the account holds nothing on this wallet's behalf. No\nbinding at all answers 404. Neither ever falls back to the wallet's own\nfigure under an asset label — a number the owner acts on must not\nquietly be about a different account.\n\n`source=intents` is refused here and pointed at `/wallet/v1/balance`:\nintents deposits are credited to the signer, which is always the\nexecutor.\n",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Token ID (`nep141:<contract>` or `native`)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Balance of the bound account (`account` is `asset`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "The wallet has no binding",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/wallet/v1/binding/transfer": {
+      "post": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "bindingTransfer",
+        "summary": "Spend from the BOUND account",
+        "description": "Move native NEAR or a NEP-141 token out of the bound asset account.\n\nA BUILDER over the existing lane, not a new one. What gets signed is\nexactly the `w_execute_extension` you could post to `/wallet/v1/call`\nyourself: same canonical op, same pre-flight, same spend-grant rules,\nsame policy evaluation, same multisig trigger, same per-promise receipt\nhandling. It exists so you do not have to assemble a nested base64\nenvelope by hand.\n\nSeparate from `/wallet/v1/transfer` because it is a different\noperation, not a mode of the same one: `/wallet/v1/transfer` signs a\nplain transfer from the wallet's own account, this signs a contract\ncall under an on-chain grant, with its own error classes\n(`agent_connect_denied`) and its own approval path.\n\nResponses are those of `/wallet/v1/call`, including `403\nagent_connect_denied` when the pre-flight refuses — read `terminal`\nbefore retrying.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "to",
+                  "amount"
+                ],
+                "properties": {
+                  "to": {
+                    "type": "string",
+                    "description": "Where the value lands. For a token this is the LOGICAL recipient, not the token contract."
+                  },
+                  "amount": {
+                    "type": "string",
+                    "description": "Native yoctoNEAR, or the token's own smallest unit when `token` is set."
+                  },
+                  "token": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "NEP-141 contract. Absent means native NEAR."
+                  },
+                  "memo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "NEP-141 `memo`, passed through untouched."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Accepted; same shape as `/wallet/v1/call`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "The Agent Connect pre-flight refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentConnectDeniedResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The wallet has no binding",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Another operation holds this wallet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/wallet/v1/binding/setup": {
+      "get": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "getBindingSetup",
+        "summary": "Installation kit for a personal_account binding",
+        "description": "`kind=personal_account` only (for `hos_lease` the partner provisions\naccounts, and this endpoint answers 400). Requires an existing\n`personal_account` binding for the wallet.\n\nReturns ONE transaction of three actions — reference the wallet code\nby its global-contract hash, `w_init` (1 yoctoNEAR), and\n`w_execute_extension` adding the executor as an extension — with\nreceiver = signer = the owner's own account. OutLayer only assembles\npayloads; the owner signs with any wallet, and their signature is\nwhat authorizes the lane, once and entirely.\n\nHARD refusal, not a warning: if the account already has ANY contract\ndeployed, the kit answers 409 — deploying over it would not clear the\nold contract's state (the typical victim being a 2FA/multisig wallet\ncontract).\n\nThe wallet code is referenced by GLOBAL-CONTRACT HASH, and a global\ncontract is published per network: the same wasm has the same hash\neverywhere, but somebody has to publish it once on each chain. This\nendpoint checks that before handing you a transaction, and answers 400\nwhere it has not been published — otherwise you would sign a\ntransaction that cannot succeed.\n",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "personal_account"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The installation transaction, ready to sign",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingSetupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "The wallet has no binding",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The account already has a contract deployed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "description": "The chain could not be read just now, so neither the account's\ncurrent code nor the availability of the wallet contract could be\nconfirmed. Transient — retry. (A network where the wallet contract\nis not published answers 400 instead, because that does not change\non a retry.)\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/wallet/v1/call": {
       "post": {
         "tags": [
@@ -300,7 +792,7 @@
         ],
         "operationId": "call",
         "summary": "Sign and broadcast a NEAR function call",
-        "description": "Native NEAR contract call. Policy is enforced before signing; if the\ncall exceeds limits, the response carries `status=pending_approval`\nand an `approval_id` for the multisig flow.\n",
+        "description": "Native NEAR contract call. Policy is enforced before signing; if the\ncall exceeds limits, the response carries `status=pending_approval`\nand an `approval_id` for the multisig flow.\n\n\nAgent Connect: a `w_execute_extension` call aimed at the wallet's own\nbound account is additionally checked against the LIVE chain — binding\nliveness, spend grant, call form, reserve floor — before anything is\nsigned. That refusal is a `403` shaped as `AgentConnectDeniedResponse`\n(not the generic error body), carrying the class, the promise index and\na `terminal` flag. The policy engine independently decodes the same\nrequest and rules it on the owner's own limits.\n",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -344,7 +836,31 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "description": "Refused by policy, or — for `w_execute_extension` on a bound account — by the Agent Connect pre-flight, which answers `AgentConnectDeniedResponse`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AgentConnectDeniedResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Another money-moving operation is using this wallet. Applies to every spending endpoint, not only this one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletBusyResponse"
+                }
+              }
+            }
           },
           "422": {
             "$ref": "#/components/responses/OnChainTxFailed"
@@ -354,6 +870,16 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "description": "The chain could not be reached to verify a binding. Transient — retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -3977,6 +4503,11 @@
             "type": "string",
             "description": "Pin a specific published version instead of the active one."
           },
+          "use_bound_identity": {
+            "type": "boolean",
+            "default": false,
+            "description": "Agent Connect: run under the BOUND asset account's name, so the\nguest's `NEAR_SENDER_ID` becomes e.g. `agent.tla` instead of the\nwallet's own account. near-email turns that into the mailbox it\nsends from, and other connectors derive keys and state from it.\n\nOpt-in, and off by default on purpose. A binding is a capability\nthe agent gains, not a change to who it already is — renaming the\nguest the moment one activated would move every derived identity\nwith nothing in your code to point at.\n\nRequires an ACTIVE binding; the worker re-verifies the claim\nagainst the chain inside the TEE and refuses the job if the chain\ndisagrees. Billing never follows it: `NEAR_USER_ACCOUNT_ID` stays\nthe paying key's owner.\n"
+          },
           "secrets_ref": {
             "type": "object",
             "properties": {
@@ -4320,15 +4851,18 @@
       },
       "RequestStatus": {
         "type": "string",
+        "description": "`partially_failed` occurs only for `w_execute_extension` (Agent Connect's extension door) and is a NORMAL outcome, not an error: the wallet detaches its promises, they execute concurrently and independently, and one failing neither reverts the others nor undoes the value they moved. Read `result.promises[]` for which did what.",
         "enum": [
           "pending_deposit",
           "processing",
           "success",
+          "partially_failed",
           "failed",
           "refunded",
           "pending_approval",
           "approved",
           "rejected",
+          "cancelled",
           "needs_review"
         ]
       },
@@ -4358,7 +4892,10 @@
           "internal_error",
           "keystore_error",
           "service_unavailable",
-          "confidential_jwt_expired"
+          "confidential_jwt_expired",
+          "agent_connect_denied",
+          "wallet_busy",
+          "binding_not_found"
         ]
       },
       "ErrorResponse": {
@@ -4514,6 +5051,27 @@
               "string",
               "null"
             ]
+          },
+          "asset_account_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Agent Connect: the bound named asset account. Only present for chain=near; null/absent when the wallet has no binding."
+          },
+          "executor_account_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Agent Connect: the executor identity. For chain=near always equal to `address`."
+          },
+          "gas_balance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Agent Connect: the executor's native balance in yoctoNEAR, cached about 30 seconds. Present only for chain=near on a BOUND wallet — it is here so whoever funds the executor learns the account and whether it needs funding in one call. Absent also when the chain could not be read, which is not a balance of zero."
           }
         }
       },
@@ -4522,7 +5080,8 @@
         "required": [
           "balance",
           "token",
-          "account_id"
+          "account_id",
+          "account"
         ],
         "properties": {
           "balance": {
@@ -4534,6 +5093,338 @@
           },
           "account_id": {
             "type": "string"
+          },
+          "account": {
+            "type": "string",
+            "enum": [
+              "asset",
+              "executor"
+            ],
+            "description": "Which identity `account_id` is, so the figure cannot be misattributed. `executor` for every wallet without a binding."
+          }
+        }
+      },
+      "WalletBusyResponse": {
+        "type": "object",
+        "description": "A `409` meaning another money-moving operation is using this wallet.\n\nA wallet runs one spend at a time. The check \"does this fit the limit?\" and the write that satisfies it are seconds apart, so two overlapping operations would both read a total that neither had written yet and both pass — spending a daily cap twice. Serializing per wallet is what makes the counters true, and it cannot be done in SQL instead: the limits live in the customer's encrypted policy, which only the enclave can read.\n\nCallers wait a short grace first, so two quick calls in a row simply queue and never see this. It appears when the operation in front is a long one — a swap or a cross-chain withdraw. Poll `in_flight_request_id` rather than retrying blindly.",
+        "required": [
+          "error",
+          "message"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "enum": [
+              "wallet_busy"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "in_flight_request_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The operation holding the wallet, when one could be identified. `null` does not mean the wallet is free — only that the holder could not be named."
+          }
+        }
+      },
+      "AgentConnectDeniedResponse": {
+        "type": "object",
+        "description": "A `403` from the Agent Connect pre-flight: the request was refused BEFORE it was signed, so no gas was spent, and the refusal names the rule the wallet contract would have panicked on.\n\nStructured rather than prose because a client has to route on it. Read `terminal` first: `true` means retrying is pointless and the OWNER must act — issue a new grant, re-provision the executor, fund the account, or rewrite the request. `false` means the same request may succeed later with nothing changed (a freeze lifted, a parked account reactivated, recognized wallet code restored).",
+        "required": [
+          "error",
+          "message",
+          "class",
+          "terminal"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "enum": [
+              "agent_connect_denied"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "One sentence the owner can act on."
+          },
+          "class": {
+            "type": "string",
+            "description": "Stable machine class. Binding liveness: `executor_not_in_control_set`, `lease_expired`, `account_expired`, `account_frozen`, `account_not_active`, `unsupported_wallet_implementation`, `unrecognized_wallet_code`, `binding_evidence_mismatch`, `chain_status_unreadable`. Spend grant: `grant_missing`, `grant_expired`, `grant_unreadable`, `grant_exhausted`, `receiver_not_granted`, `token_not_granted`, `token_budget_exceeded`, `collection_not_granted`, `item_not_granted`, `own_collection_refused`, `insufficient_vs_reserve`, and `grant_shape_violation:<subcode>` where subcode is one of `refund_target_not_allowed`, `grant_call_must_stand_alone`, `grant_call_deposit`, `grant_approval_not_allowed`, `grant_args_unreadable`, `grant_method_not_allowed`, `grant_action_not_allowed`."
+          },
+          "terminal": {
+            "type": "boolean",
+            "description": "`true` — do not retry. Every grant-layer class is terminal: the chain's answer does not change while the request and the grant stay as they are."
+          },
+          "promise_index": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Which promise inside the decoded request the rule is about; `null` for a refusal about the request or the binding as a whole."
+          },
+          "additional_violations": {
+            "type": "integer",
+            "description": "How many further violations the same request carries beyond the one reported — whether fixing this one ends the matter."
+          }
+        }
+      },
+      "PutBindingRequest": {
+        "type": "object",
+        "required": [
+          "asset_account_id"
+        ],
+        "properties": {
+          "asset_account_id": {
+            "type": "string",
+            "description": "Named NEAR account this wallet operates: the leased asset account (`agent.tla`) for `hos_lease`, the owner's own account (`user.near`) for `personal_account`."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "hos_lease",
+              "personal_account"
+            ],
+            "default": "hos_lease",
+            "description": "Binding mode. Omitted means `hos_lease`, byte-for-byte the pre-kind behavior."
+          },
+          "owner_account_id": {
+            "type": "string",
+            "description": "`hos_lease`: required; the account that authorized the lane, as reported at provisioning (informational — authorization is proven by the on-chain control set). `personal_account`: optional, and must equal `asset_account_id` — the owner IS the account."
+          },
+          "impl_version": {
+            "type": "integer",
+            "description": "`hos_lease` only (REQUIRED there, REJECTED for `personal_account`): wallet implementation version, read from the asset account's `hos_lease()`. Pins which request decoder applies; an unsupported value is rejected at binding time (terminal, do not retry)."
+          }
+        },
+        "example": {
+          "asset_account_id": "agent.tla",
+          "owner_account_id": "owner.near",
+          "impl_version": 6
+        }
+      },
+      "BindingResponse": {
+        "type": "object",
+        "required": [
+          "binding_id",
+          "wallet_id",
+          "kind",
+          "asset_account_id",
+          "owner_account_id",
+          "executor_account_id",
+          "binding_status",
+          "created_at"
+        ],
+        "properties": {
+          "binding_id": {
+            "type": "string"
+          },
+          "wallet_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "hos_lease",
+              "personal_account"
+            ]
+          },
+          "asset_account_id": {
+            "type": "string"
+          },
+          "owner_account_id": {
+            "type": "string"
+          },
+          "executor_account_id": {
+            "type": "string",
+            "description": "The OutLayer execution identity — register it in the account's extension set (and, for hos_lease, provision its spend grant)."
+          },
+          "binding_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "active",
+              "suspended",
+              "revoked"
+            ],
+            "description": "OutLayer's view only, not an attestation of chain state. `pending` until the executor is first observed live in the extension set; `suspended` on reversible faults (freeze, non-Active state, unsupported impl_version, unrecognized code hash); `revoked` is terminal (extension removed, lease/state expired, ownership rotated, or DELETE)."
+          },
+          "impl_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Absent for kind=personal_account."
+          },
+          "decoder_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Derived by OutLayer, never client-supplied. Absent for kind=personal_account, whose versioning is the account's code hash checked at verify time."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "gas_balance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Executor's native NEAR balance in yoctoNEAR (GET only). Null when the RPC could not answer."
+          },
+          "gas_balance_low": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "The executor is under `gas_balance_threshold` and will soon be unable to pay for transactions — top it up. `null` means the balance could not be read, which is UNKNOWN rather than low. Poll this endpoint; there is no separate low-gas notification."
+          },
+          "gas_balance_threshold": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "yoctoNEAR floor `gas_balance_low` is measured against."
+          }
+        },
+        "example": {
+          "binding_id": "bnd_7f3a2b1c9d8e4f60a1b2c3d4e5f60718",
+          "wallet_id": "9c3c9e10-1c1f-4f5e-9c4a-1d7b9a8f3c20",
+          "kind": "hos_lease",
+          "asset_account_id": "agent.tla",
+          "owner_account_id": "owner.near",
+          "executor_account_id": "9c3c9e101c1f4f5e9c4a1d7b9a8f3c20",
+          "binding_status": "pending",
+          "impl_version": 6,
+          "decoder_version": 1,
+          "created_at": "2026-08-18T14:00:00Z"
+        }
+      },
+      "BindingSetupResponse": {
+        "type": "object",
+        "required": [
+          "kind",
+          "asset_account_id",
+          "executor_account_id",
+          "code_hash",
+          "transactions"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "personal_account"
+            ]
+          },
+          "asset_account_id": {
+            "type": "string"
+          },
+          "executor_account_id": {
+            "type": "string"
+          },
+          "code_hash": {
+            "type": "string",
+            "description": "Base58 code hash of the published no-sign wallet global contract — the same artifact the verifier's allowlist pins."
+          },
+          "transactions": {
+            "type": "array",
+            "description": "One transaction, three actions; receiver = signer = the owner's account.",
+            "items": {
+              "type": "object",
+              "required": [
+                "signer_id",
+                "receiver_id",
+                "actions"
+              ],
+              "properties": {
+                "signer_id": {
+                  "type": "string"
+                },
+                "receiver_id": {
+                  "type": "string"
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "example": {
+          "kind": "personal_account",
+          "asset_account_id": "user.near",
+          "executor_account_id": "9c3c9e101c1f4f5e9c4a1d7b9a8f3c20",
+          "code_hash": "BwjDnyemmBhrCyuviDGpoQAm9mdjTfrX7ZjqgZB4MHvM",
+          "transactions": [
+            {
+              "signer_id": "user.near",
+              "receiver_id": "user.near",
+              "actions": [
+                {
+                  "type": "UseGlobalContract",
+                  "code_hash": "BwjDnyemmBhrCyuviDGpoQAm9mdjTfrX7ZjqgZB4MHvM"
+                },
+                {
+                  "type": "FunctionCall",
+                  "method_name": "w_init",
+                  "args": {},
+                  "gas": "30000000000000",
+                  "deposit": "1"
+                },
+                {
+                  "type": "FunctionCall",
+                  "method_name": "w_execute_extension",
+                  "args": {
+                    "request": {
+                      "internal": [
+                        {
+                          "op": "add_extension",
+                          "payload": {
+                            "account_id": "9c3c9e101c1f4f5e9c4a1d7b9a8f3c20"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "gas": "30000000000000",
+                  "deposit": "1"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "DeleteBindingResponse": {
+        "type": "object",
+        "required": [
+          "binding_status",
+          "cancelled_approvals"
+        ],
+        "properties": {
+          "binding_status": {
+            "type": "string",
+            "enum": [
+              "revoked"
+            ]
+          },
+          "binding_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The record that was ended; absent when there was nothing to end."
+          },
+          "cancelled_approvals": {
+            "type": "integer",
+            "description": "Pending multisig approvals targeting the asset account that were cancelled rather than left completable. The requests those approvals were gating are moved to `cancelled` in the same step — an approval cancelled on its own stops the execution but leaves the request at `pending_approval` for good, unable to complete and never saying so. Requests already past the decision (`processing`) are left alone: they may have bytes on the wire."
           }
         }
       },
@@ -4637,7 +5528,8 @@
               "object",
               "null"
             ],
-            "additionalProperties": {}
+            "additionalProperties": {},
+            "description": "For `w_execute_extension` this also carries `promises`: one entry per promise of the decoded request, in the order the request listed them, each with `index`, `receiver`, `status` (`success` | `failed` | `unknown`), `receipt_id` and the chain's own `failure` object where it failed. `unknown` means the promise's receipt was not found in the outcome — it is NOT read as success, and its amounts are not charged to the velocity counters."
           },
           "approval_id": {
             "type": [
@@ -6372,6 +7264,14 @@
             "additionalProperties": {},
             "description": "Canonical op to RENDER (parsed from the stored canonical JSON). The dashboard renders this directly. `null` for legacy rows predating canonical-op storage."
           },
+          "decoded_effects": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {},
+            "description": "Present ONLY for a `w_execute_extension` op (Agent Connect's extension door), whose own fields describe nothing: the destination is the agent's own account and the deposit is a mandated 1-yocto marker, while every real recipient and amount is nested in `args_base64`. This is those contents, decoded from the same bytes `request_hash` covers — an approver renders it INSTEAD of guessing from `op`. Absent for every other operation, which states its effects in its own fields.\n\nShape: `native_total` (yocto, decimal string), `action_count`, `promises[]` (`index`, `receiver`, `refund_to`, `native`), `token_moves[]` (`promise`, `method`, `token`, `recipient`, `amount`, `unit` = `token_units` | `token_id`), `storage_registrations[]`, plus `internal_ops[]` and `unstatable_calls[]` — the last two are refused before an approval can exist and are rendered only so their presence could never be silent."
+          },
           "request_hash": {
             "type": "string",
             "description": "Canonical request hash to SIGN — approvers sign `approve:{approval_id}:{wallet_pubkey}:{request_hash}` (see `Nep413Auth`)."
@@ -6462,6 +7362,14 @@
             ],
             "additionalProperties": {},
             "description": "Canonical op for the dashboard to render. `null` for legacy rows."
+          },
+          "decoded_effects": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {},
+            "description": "What a `w_execute_extension` op actually moves, decoded from the same bytes `request_hash` covers — see `PendingApproval` for the shape and for why rendering `op` alone would show an approver nothing about the money. `null` for every other operation."
           },
           "wallet_pubkey": {
             "type": "string",
