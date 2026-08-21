@@ -2870,7 +2870,6 @@ paths:
         may still be running and will be charged.
       security:
         - PaymentKeyAuth: []
-        - BearerAuth: []
       parameters:
         - name: owner
           in: path
@@ -3035,7 +3034,6 @@ paths:
       summary: A key's allowance, balance, and the connectors in its scope
       security:
         - PaymentKeyAuth: []
-        - BearerAuth: []
       responses:
         '200':
           description: |
@@ -3667,12 +3665,6 @@ components:
     CreatePaymentKeyRequest:
       type: object
       properties:
-        agent:
-          type: boolean
-          default: false
-          description: |
-            A keyless key, named after the wallet itself. One per wallet, and it
-            cannot be deleted.
         initial_deposit_usdc:
           type: string
           description: Dollars, e.g. `"1.00"`. Mutually exclusive with `initial_deposit_near`.
@@ -3694,10 +3686,10 @@ components:
         nonce: { type: integer }
         owner: { type: string }
         payment_key:
-          type: [string, 'null']
+          type: string
           description: |
-            Shown once, and ONLY for an ordinary key. An agent key has no
-            plaintext to hand over.
+            Shown once. Store it: a call presents it as `X-Payment-Key`, and it
+            cannot be re-issued.
         store_secrets_tx: { type: string }
         top_up_tx: { type: [string, 'null'] }
     SubscriptionStatus:
@@ -3706,7 +3698,12 @@ components:
         owner: { type: string }
         nonce: { type: integer }
         has_subscription: { type: boolean }
-        is_agent: { type: boolean }
+        wallet_account:
+          type: string
+          description: |
+            The custody wallet this key belongs to, when it belongs to one.
+            Absent for a key owned by a named account. Read from the key's
+            `owner`.
         expires_at: { type: [string, 'null'] }
         expired: { type: boolean }
         allowance_total_usd: { type: [string, 'null'] }

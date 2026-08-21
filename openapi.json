@@ -3464,9 +3464,6 @@
         "security": [
           {
             "PaymentKeyAuth": []
-          },
-          {
-            "BearerAuth": []
           }
         ],
         "parameters": [
@@ -3706,9 +3703,6 @@
         "security": [
           {
             "PaymentKeyAuth": []
-          },
-          {
-            "BearerAuth": []
           }
         ],
         "responses": {
@@ -4607,11 +4601,6 @@
       "CreatePaymentKeyRequest": {
         "type": "object",
         "properties": {
-          "agent": {
-            "type": "boolean",
-            "default": false,
-            "description": "A keyless key, named after the wallet itself. One per wallet, and it\ncannot be deleted.\n"
-          },
           "initial_deposit_usdc": {
             "type": "string",
             "description": "Dollars, e.g. `\"1.00\"`. Mutually exclusive with `initial_deposit_near`."
@@ -4643,11 +4632,8 @@
             "type": "string"
           },
           "payment_key": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Shown once, and ONLY for an ordinary key. An agent key has no\nplaintext to hand over.\n"
+            "type": "string",
+            "description": "Shown once. Store it: a call presents it as `X-Payment-Key`, and it\ncannot be re-issued.\n"
           },
           "store_secrets_tx": {
             "type": "string"
@@ -4672,8 +4658,9 @@
           "has_subscription": {
             "type": "boolean"
           },
-          "is_agent": {
-            "type": "boolean"
+          "wallet_account": {
+            "type": "string",
+            "description": "The custody wallet this key belongs to, when it belongs to one.\nAbsent for a key owned by a named account. Read from the key's\n`owner`.\n"
           },
           "expires_at": {
             "type": [
