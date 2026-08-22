@@ -2909,8 +2909,16 @@ paths:
                 $ref: '#/components/schemas/ProjectCallResponse'
         '402':
           description: The key cannot pay for this call.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallRefusal'
         '403':
           description: The key's scope does not include this project.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallRefusal'
         '408':
           description: |
             The call did not finish inside the synchronous window and has been
@@ -2946,7 +2954,15 @@ paths:
                   used: { type: integer }
                   limit: { type: integer }
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: >
+            No payment credential, or one that cannot pay. `reason` tells the two
+            apart: `missing_payment_key` for a caller that sent nothing, and
+            `wk_is_not_a_payer` for one that sent a `wk_` — that credential names a
+            wallet on /wallet/v1/*, it does not buy anything here.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallRefusal'
 
   /calls/{call_id}:
     get:
@@ -3654,6 +3670,21 @@ components:
         attestation_url:
           type: [string, 'null']
           description: The TEE quote for this execution.
+    CallRefusal:
+      type: object
+      description: >
+        Every refusal from `POST /call/{owner}/{project}`. `error` is a sentence
+        written for a person and is reworded freely; `reason` is the contract —
+        branch on it. The enum is generated from `CallError::reason()` in the
+        coordinator and is exhaustive there, so a value outside it means the
+        client is older than the server.
+      properties:
+        error: { type: string, description: The human sentence. }
+        reason:
+          type: string
+          description: Machine-readable name of the refusal.
+          enum: [allowance_no_deposit, bad_key_format, compute_limit_too_low, connector_quota_exceeded, expires_too_soon, insufficient_allowance, insufficient_balance, internal_error, invalid_key, keystore_error, max_per_call_exceeded, missing_payment_key, no_deposit, operation_limit_reached, out_of_funds, project_not_allowed, project_not_found, rate_limit_exceeded, service_unavailable, tee_session_required, timeout, too_many_concurrent_calls, unknown_operation, vault_not_verified, vault_unlocked, wallet_not_yours, wk_is_not_a_payer]
+      required: [error, reason]
     CallTimedOut:
       type: object
       properties:
