@@ -4399,7 +4399,11 @@ components:
             (`success` | `failed` | `unknown`), `receipt_id` and the chain's own
             `failure` object where it failed. `unknown` means the promise's
             receipt was not found in the outcome — it is NOT read as success,
-            and its amounts are not charged to the velocity counters.
+            and its amounts are not charged to the velocity counters. A call
+            the wallet contract REFUSED carries `promises: []`: the refusal
+            happened before anything was detached, so no promise exists to
+            report on, and none of the request is charged to the counters —
+            read `failure` for the contract's reason.
         approval_id:
           type: [string, 'null']
           format: uuid
