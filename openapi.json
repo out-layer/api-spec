@@ -5161,7 +5161,7 @@
       },
       "WalletBusyResponse": {
         "type": "object",
-        "description": "A `409` meaning another money-moving operation is using this wallet.\n\nA wallet runs one spend at a time. The check \"does this fit the limit?\" and the write that satisfies it are seconds apart, so two overlapping operations would both read a total that neither had written yet and both pass — spending a daily cap twice. Serializing per wallet is what makes the counters true, and it cannot be done in SQL instead: the limits live in the customer's encrypted policy, which only the enclave can read.\n\nCallers wait a short grace first, so two quick calls in a row simply queue and never see this. It appears when the operation in front is a long one — a swap or a cross-chain withdraw. Poll `in_flight_request_id` rather than retrying blindly.",
+        "description": "A `409` meaning another money-moving operation is using this wallet.\n\nA wallet runs one spend at a time. The check \"does this fit the limit?\" and the write that satisfies it are seconds apart, so two overlapping operations would both read a total that neither had written yet and both pass — spending a daily cap twice. Serializing per wallet is what makes the counters true, and it cannot be done in SQL instead: the limits live in the customer's encrypted policy, which only the enclave can read.\n\nCallers wait a short grace first, so two quick calls in a row simply queue and never see this. It appears when the operation in front is a long one — a swap or a cross-chain withdraw. Poll `in_flight_request_id` when it is set, rather than retrying blindly; when it is `null`, `in_flight_operation` still says what to wait for.",
         "required": [
           "error",
           "message"
@@ -5182,7 +5182,30 @@
               "null"
             ],
             "format": "uuid",
-            "description": "The operation holding the wallet, when one could be identified. `null` does not mean the wallet is free — only that the holder could not be named."
+            "description": "The request holding the wallet, and only ever one that `GET /wallet/v1/requests/{request_id}` can already answer. `null` never means the wallet is free: it means there is nothing to poll, and `message` says which of the two reasons applies — the holder has not written its request row yet (retrying shortly yields an id), or the operation writes no request row at all, as a cross-chain deposit intent does. An id is deliberately withheld until its row exists, because one handed out earlier answers `404` and reads as a request that was lost."
+          },
+          "in_flight_operation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the holder is doing. Present even when `in_flight_request_id` is `null`, and worth branching on: a transfer clears in seconds while a cross-chain withdraw can run for many minutes, and that is the difference between retrying at once and backing off. `repair` is the odd one — a read of a request left unresolved settles it under the same lock, and that finishes quickly.",
+            "enum": [
+              null,
+              "transfer",
+              "call",
+              "swap",
+              "delete",
+              "withdraw",
+              "cross_chain_withdraw",
+              "cross_chain_deposit",
+              "storage_deposit",
+              "intents_transfer",
+              "intents_deposit",
+              "confidential",
+              "confidential_deposit",
+              "repair"
+            ]
           }
         }
       },
