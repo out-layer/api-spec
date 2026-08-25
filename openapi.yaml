@@ -2927,6 +2927,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CallTimedOut'
+        '409':
+          description: |
+            `no_bound_identity` — the call asked to run as a bound account with
+            `use_bound_identity`, and there is none to run as: either the paying
+            key names no wallet (`terminal: true`), or the wallet has no ACTIVE
+            binding (`terminal: false` — a pending or revoked binding authorizes
+            nothing, and one that activates later makes the same call work).
+
+            Refused before the call is priced or charged, and never answered by
+            running the job under the caller's own name: which account the guest
+            IS decides what a connector does with it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallRefusal'
         '429':
           description: |
             Three different refusals share this status, and a caller tells them
@@ -3641,10 +3656,13 @@ components:
             guest the moment one activated would move every derived identity
             with nothing in your code to point at.
 
-            Requires an ACTIVE binding; the worker re-verifies the claim
-            against the chain inside the TEE and refuses the job if the chain
-            disagrees. Billing never follows it: `NEAR_USER_ACCOUNT_ID` stays
-            the paying key's owner.
+            Requires an ACTIVE binding, and says so rather than falling back:
+            with no binding — or with one still pending, or revoked — the call
+            is refused `409 no_bound_identity` before it is priced or charged.
+            The worker then re-verifies the claim against the chain inside the
+            TEE and refuses the job if the chain disagrees. Billing never
+            follows the name: `NEAR_USER_ACCOUNT_ID` stays the paying key's
+            owner.
         secrets_ref:
           type: object
           properties:
@@ -3680,10 +3698,19 @@ components:
         client is older than the server.
       properties:
         error: { type: string, description: The human sentence. }
+        terminal:
+          type: boolean
+          description: >
+            Present on the refusals where retrying has an answer. `true` means
+            the same request can never succeed; `false` means it succeeds once
+            something changes that the caller or the wallet's owner can change.
+            `no_bound_identity` sends both: `true` when the paying key names no
+            wallet at all, `false` when the wallet simply has no ACTIVE binding
+            yet.
         reason:
           type: string
           description: Machine-readable name of the refusal.
-          enum: [allowance_no_deposit, bad_key_format, compute_limit_too_low, connector_quota_exceeded, expires_too_soon, insufficient_allowance, insufficient_balance, internal_error, invalid_key, keystore_error, max_per_call_exceeded, missing_payment_key, no_deposit, operation_limit_reached, out_of_funds, project_not_allowed, project_not_found, rate_limit_exceeded, service_unavailable, tee_session_required, timeout, too_many_concurrent_calls, unknown_operation, vault_not_verified, vault_unlocked, wallet_not_yours, wk_is_not_a_payer]
+          enum: [allowance_no_deposit, bad_key_format, compute_limit_too_low, connector_quota_exceeded, expires_too_soon, insufficient_allowance, insufficient_balance, internal_error, invalid_key, keystore_error, max_per_call_exceeded, missing_payment_key, no_bound_identity, no_deposit, operation_limit_reached, out_of_funds, project_not_allowed, project_not_found, rate_limit_exceeded, service_unavailable, tee_session_required, timeout, too_many_concurrent_calls, unknown_operation, vault_not_verified, vault_unlocked, wallet_not_yours, wk_is_not_a_payer]
       required: [error, reason]
     CallTimedOut:
       type: object
