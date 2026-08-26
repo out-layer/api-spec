@@ -2942,6 +2942,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CallRefusal'
+        '503':
+          description: |
+            `upstream_unavailable` — something this call depends on has not
+            caught up yet, and the same call works later. `keystore_error` —
+            the TEE keystore was unreachable or refused to sign. Both are
+            transient and both are sent with a `Retry-After` interval.
+
+            Deliberately not `service_unavailable`: on `/wallet/v1/*` that code
+            means a feature this deployment does not offer and carries no
+            interval, and one product must not use one code for "come back" and
+            "never come back".
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying.
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallRefusal'
         '429':
           description: |
             Three different refusals share this status, and a caller tells them
@@ -3554,13 +3574,20 @@ components:
               value: { error: internal_error }
     ServiceUnavailable:
       description: >-
-        Unavailable — either permanently on this deployment or transiently.
-        `service_unavailable`: feature not enabled/configured (e.g. the
-        `/wallet/v1/confidential/*` routes when `ENABLE_CONFIDENTIAL_INTENTS`
-        is off or the confidential upstream is not configured) — do not retry.
-        `keystore_error`: the TEE keystore (signing / key derivation) was
-        unreachable or rejected the request — transient, retry after the
-        `Retry-After` header. `confidential_jwt_expired`: the confidential
+        Unavailable — either permanently on this deployment or transiently, and
+        the code says which. `service_unavailable`: feature not
+        enabled/configured (e.g. the `/wallet/v1/confidential/*` routes when
+        `ENABLE_CONFIDENTIAL_INTENTS` is off, the binding-event endpoints
+        without a webhook secret, or NEAR Intents on a network with no solvers)
+        — do not retry; no interval is sent because none would be true.
+        `chain_unavailable`: the chain, or a node in front of it, could not
+        answer this second — a balance that could not be read, a code hash that
+        could not be fetched, a binding that could not be verified, a
+        transaction that expired against a block the node has forgotten.
+        Nothing happened and nothing was charged — transient, retry after the
+        `Retry-After` header. `keystore_error`: the TEE keystore (signing / key
+        derivation) was unreachable or rejected the request — transient, retry
+        after `Retry-After`. `confidential_jwt_expired`: the confidential
         per-account JWT was rejected by the 1Click upstream and
         re-authentication also failed — transient, retry after `Retry-After`.
         (Transient upstream failures use 503 rather than 502 because
@@ -3568,7 +3595,12 @@ components:
         page, hiding the JSON body from clients.)
       headers:
         Retry-After:
-          description: Present on transient failures (`keystore_error`, `confidential_jwt_expired`) — seconds to wait before retrying.
+          description: >-
+            Present on transient failures (`chain_unavailable`,
+            `keystore_error`, `confidential_jwt_expired`) — seconds to wait
+            before retrying. Absent on `service_unavailable`, which is not
+            transient: there is no interval after which an unset environment
+            variable becomes set.
           schema:
             type: integer
       content:
@@ -3707,10 +3739,17 @@ components:
             `no_bound_identity` sends both: `true` when the paying key names no
             wallet at all, `false` when the wallet simply has no ACTIVE binding
             yet.
+
+            `upstream_unavailable` (503 + `Retry-After`) is this door's
+            transient answer — something we depend on has not caught up and the
+            same call works later. It is deliberately NOT called
+            `service_unavailable`: on `/wallet/v1/*` that code means a feature
+            this deployment does not offer and must not be retried, and a
+            client's retry rule is written once for every answer.
         reason:
           type: string
           description: Machine-readable name of the refusal.
-          enum: [allowance_no_deposit, bad_key_format, compute_limit_too_low, connector_quota_exceeded, expires_too_soon, insufficient_allowance, insufficient_balance, internal_error, invalid_key, keystore_error, max_per_call_exceeded, missing_payment_key, no_bound_identity, no_deposit, operation_limit_reached, out_of_funds, project_not_allowed, project_not_found, rate_limit_exceeded, service_unavailable, tee_session_required, timeout, too_many_concurrent_calls, unknown_operation, vault_not_verified, vault_unlocked, wallet_not_yours, wk_is_not_a_payer]
+          enum: [allowance_no_deposit, bad_key_format, compute_limit_too_low, connector_quota_exceeded, expires_too_soon, insufficient_allowance, insufficient_balance, internal_error, invalid_key, keystore_error, max_per_call_exceeded, missing_payment_key, no_bound_identity, no_deposit, operation_limit_reached, out_of_funds, project_not_allowed, project_not_found, rate_limit_exceeded, upstream_unavailable, tee_session_required, timeout, too_many_concurrent_calls, unknown_operation, vault_not_verified, vault_unlocked, wallet_not_yours, wk_is_not_a_payer]
       required: [error, reason]
     CallTimedOut:
       type: object
@@ -3902,6 +3941,10 @@ components:
         - internal_error
         - keystore_error
         - service_unavailable
+        # Same status as `service_unavailable`, opposite instruction: this one
+        # clears by itself and carries a Retry-After. They were one code once,
+        # and the header could then only be right for one of them.
+        - chain_unavailable
         - confidential_jwt_expired
         # Agent Connect. The bodies for these two carry MORE than the uniform
         # {error, message} shape — see AgentConnectDeniedResponse and

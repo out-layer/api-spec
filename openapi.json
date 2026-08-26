@@ -3609,6 +3609,24 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "`upstream_unavailable` — something this call depends on has not\ncaught up yet, and the same call works later. `keystore_error` —\nthe TEE keystore was unreachable or refused to sign. Both are\ntransient and both are sent with a `Retry-After` interval.\n\nDeliberately not `service_unavailable`: on `/wallet/v1/*` that code\nmeans a feature this deployment does not offer and carries no\ninterval, and one product must not use one code for \"come back\" and\n\"never come back\".\n",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallRefusal"
+                }
+              }
+            }
           }
         }
       }
@@ -4437,10 +4455,10 @@
         }
       },
       "ServiceUnavailable": {
-        "description": "Unavailable — either permanently on this deployment or transiently. `service_unavailable`: feature not enabled/configured (e.g. the `/wallet/v1/confidential/*` routes when `ENABLE_CONFIDENTIAL_INTENTS` is off or the confidential upstream is not configured) — do not retry. `keystore_error`: the TEE keystore (signing / key derivation) was unreachable or rejected the request — transient, retry after the `Retry-After` header. `confidential_jwt_expired`: the confidential per-account JWT was rejected by the 1Click upstream and re-authentication also failed — transient, retry after `Retry-After`. (Transient upstream failures use 503 rather than 502 because Cloudflare replaces origin 502/504 responses with its own HTML error page, hiding the JSON body from clients.)",
+        "description": "Unavailable — either permanently on this deployment or transiently, and the code says which. `service_unavailable`: feature not enabled/configured (e.g. the `/wallet/v1/confidential/*` routes when `ENABLE_CONFIDENTIAL_INTENTS` is off, the binding-event endpoints without a webhook secret, or NEAR Intents on a network with no solvers) — do not retry; no interval is sent because none would be true. `chain_unavailable`: the chain, or a node in front of it, could not answer this second — a balance that could not be read, a code hash that could not be fetched, a binding that could not be verified, a transaction that expired against a block the node has forgotten. Nothing happened and nothing was charged — transient, retry after the `Retry-After` header. `keystore_error`: the TEE keystore (signing / key derivation) was unreachable or rejected the request — transient, retry after `Retry-After`. `confidential_jwt_expired`: the confidential per-account JWT was rejected by the 1Click upstream and re-authentication also failed — transient, retry after `Retry-After`. (Transient upstream failures use 503 rather than 502 because Cloudflare replaces origin 502/504 responses with its own HTML error page, hiding the JSON body from clients.)",
         "headers": {
           "Retry-After": {
-            "description": "Present on transient failures (`keystore_error`, `confidential_jwt_expired`) — seconds to wait before retrying.",
+            "description": "Present on transient failures (`chain_unavailable`, `keystore_error`, `confidential_jwt_expired`) — seconds to wait before retrying. Absent on `service_unavailable`, which is not transient: there is no interval after which an unset environment variable becomes set.",
             "schema": {
               "type": "integer"
             }
@@ -4618,7 +4636,7 @@
           },
           "terminal": {
             "type": "boolean",
-            "description": "Present on the refusals where retrying has an answer. `true` means the same request can never succeed; `false` means it succeeds once something changes that the caller or the wallet's owner can change. `no_bound_identity` sends both: `true` when the paying key names no wallet at all, `false` when the wallet simply has no ACTIVE binding yet.\n"
+            "description": "Present on the refusals where retrying has an answer. `true` means the same request can never succeed; `false` means it succeeds once something changes that the caller or the wallet's owner can change. `no_bound_identity` sends both: `true` when the paying key names no wallet at all, `false` when the wallet simply has no ACTIVE binding yet.\n`upstream_unavailable` (503 + `Retry-After`) is this door's transient answer — something we depend on has not caught up and the same call works later. It is deliberately NOT called `service_unavailable`: on `/wallet/v1/*` that code means a feature this deployment does not offer and must not be retried, and a client's retry rule is written once for every answer.\n"
           },
           "reason": {
             "type": "string",
@@ -4643,7 +4661,7 @@
               "project_not_allowed",
               "project_not_found",
               "rate_limit_exceeded",
-              "service_unavailable",
+              "upstream_unavailable",
               "tee_session_required",
               "timeout",
               "too_many_concurrent_calls",
@@ -4962,6 +4980,7 @@
           "internal_error",
           "keystore_error",
           "service_unavailable",
+          "chain_unavailable",
           "confidential_jwt_expired",
           "agent_connect_denied",
           "wallet_busy",
