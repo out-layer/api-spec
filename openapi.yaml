@@ -3921,12 +3921,23 @@ components:
         - missing_auth
         - invalid_api_key
         - missing_wallet_id
+        - invalid_wallet_id
         - missing_signature
+        - invalid_signature
+        - missing_timestamp
         - timestamp_expired
         - wallet_frozen
         - policy_denied
         - not_approver
         - insufficient_balance
+        # 402, and about the SIGNER rather than the request: the account that
+        # would send the transaction cannot pay for it. `wallet_underfunded`
+        # names the wallet's own NEAR account and what the call costs;
+        # `vault_underfunded` is the same shortfall on a vault. Actionable and
+        # permanent until somebody sends funds — not something to retry on a
+        # timer.
+        - wallet_underfunded
+        - vault_underfunded
         - invalid_address
         - rate_limited
         - unsupported_chain
@@ -3945,6 +3956,16 @@ components:
         # clears by itself and carries a Retry-After. They were one code once,
         # and the header could then only be right for one of them.
         - chain_unavailable
+        # 422, and the OPPOSITE instruction to `chain_unavailable` above. The
+        # chain ANSWERED, and the answer was about the account asked rather than
+        # a value: no such account, no contract code, no such method, or code
+        # that panicked. No number of retries changes that, so no Retry-After is
+        # sent. A balance route answers this rather than a figure: a contract
+        # that cannot say what an account holds has not said it holds nothing.
+        - chain_refused
+        # The node's own validation refused to admit the transaction — expired,
+        # bad nonce, unknown signer. Nothing executed and nothing was charged.
+        - tx_rejected_by_node
         - confidential_jwt_expired
         # Agent Connect. The bodies for these two carry MORE than the uniform
         # {error, message} shape — see AgentConnectDeniedResponse and
