@@ -205,8 +205,22 @@
         ],
         "operationId": "getBalance",
         "summary": "Read balance",
-        "description": "Returns the balance for a token on the requested chain. Currently only\n`chain=near` is supported for native balance reads; cross-chain balances\nshould be read from the upstream chain directly.\n\nSet `source=intents` to read the wallet's intents.near balance\n(`mt_balance_of`) instead of the on-chain account balance.\n\nThis endpoint always answers for the WALLET'S OWN account (the\nexecutor), bound or not — its meaning never changes when a binding is\nadded. The bound asset account has its own endpoint,\n`GET /wallet/v1/binding/balance`.\n\nThe rule for both sides of the API is one sentence: everything under\n`/wallet/v1/binding/` is the bound account, everything else is the\nwallet itself. `/wallet/v1/transfer` moves the wallet's own funds;\n`/wallet/v1/binding/transfer` moves the bound account's.\n\n`source=intents` belongs here and only here: an intents.near deposit is\ncredited to whoever signed it, which is always the executor, so the\nbound account has no intents balance and never will.\n\nThe response names the identity it describes in `account`, which for\nthis endpoint is always `executor`.\n",
+        "description": "Returns the balance for a token on the requested chain. Currently only\n`chain=near` is supported for native balance reads; cross-chain balances\nshould be read from the upstream chain directly.\n\nSet `source=intents` to read the wallet's intents.near balance\n(`mt_balance_of`) instead of the on-chain account balance.\n\nBy default this endpoint answers for the WALLET'S OWN account (the\nexecutor), bound or not — its meaning never changes when a binding is\nadded. Pass `account=asset` to ask about the bound account instead;\nthat path is identical to `GET /wallet/v1/binding/balance`, which\nremains available.\n\nThe default is deliberately NOT the binding. Following it would change,\nwith no warning, which account an existing caller's number describes —\nincluding for `personal_account` bindings, whose owners never asked for\nAgent Connect semantics. `asset` is explicit.\n\nThe rule for both sides of the API is one sentence: everything under\n`/wallet/v1/binding/` is the bound account, everything else is the\nwallet itself unless `account=asset` says otherwise.\n`/wallet/v1/transfer` moves the wallet's own funds;\n`/wallet/v1/binding/transfer` moves the bound account's.\n\n`account=asset` on a wallet with no ACTIVE binding is refused rather\nthan answered with the executor's figure under an asset label.\n\n`source=intents` belongs to the executor and only the executor: an\nintents.near deposit is credited to whoever signed it, so the bound\naccount has no intents balance and never will. Combining it with\n`account=asset` is refused.\n\nThe response names the identity it describes in `account`.\n",
         "parameters": [
+          {
+            "name": "account",
+            "in": "query",
+            "required": false,
+            "description": "Which of a bound wallet's two identities the balances describe. Omitted means `executor`, unchanged from before this parameter existed. `asset` requires an ACTIVE binding and is refused otherwise.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asset",
+                "executor"
+              ],
+              "default": "executor"
+            }
+          },
           {
             "name": "chain",
             "in": "query",
@@ -5153,7 +5167,7 @@
               "string",
               "null"
             ],
-            "description": "Agent Connect: the bound named asset account. Only present for chain=near; null/absent when the wallet has no binding."
+            "description": "Agent Connect: the bound named asset account. Always present for chain=near and `null` when the wallet has no binding — a key that is simply absent is a different answer to a client that checks for one."
           },
           "executor_account_id": {
             "type": [
@@ -5332,7 +5346,6 @@
           "wallet_id",
           "kind",
           "asset_account_id",
-          "owner_account_id",
           "executor_account_id",
           "binding_status",
           "created_at"
@@ -5354,12 +5367,9 @@
           "asset_account_id": {
             "type": "string"
           },
-          "owner_account_id": {
-            "type": "string"
-          },
           "executor_account_id": {
             "type": "string",
-            "description": "The OutLayer execution identity — register it in the account's extension set (and, for hos_lease, provision its spend grant)."
+            "description": "The OutLayer execution identity — register it in the account's extension set (and, for hos_lease, provision its spend grant). NOTE: the response deliberately carries no owner. `owner_account_id` is accepted at PUT as the provisioning receipt House of Stake hands the integrator, and is stored — but it is checked for shape only and compared against nothing, so returning it would present a claim as an established fact. Who holds a leased account is `nft_item_info.owner_id` on chain, and what ends a lane when it changes hands is the rotation pin."
           },
           "binding_status": {
             "type": "string",
@@ -5416,7 +5426,6 @@
           "wallet_id": "9c3c9e10-1c1f-4f5e-9c4a-1d7b9a8f3c20",
           "kind": "hos_lease",
           "asset_account_id": "agent.tla",
-          "owner_account_id": "owner.near",
           "executor_account_id": "9c3c9e101c1f4f5e9c4a1d7b9a8f3c20",
           "binding_status": "pending",
           "impl_version": 6,
