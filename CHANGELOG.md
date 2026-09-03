@@ -6,6 +6,10 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Added
 
+- **Agent Connect** — `registry_disagrees` on `AgentConnectDeniedResponse.class`:
+  a leased account whose collection's `nft_token` does not confirm the
+  account's own `nft_item_info`. Reversible (`terminal: false`); the registry
+  may trail the account by a block.
 - **Execution** (`POST /call/{owner}/{project}`, `GET /calls/{call_id}`) — the
   route every project is reached through, connectors included. Documents the
   universal `operation` field a connector must name inside `input` (the one
