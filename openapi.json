@@ -5369,7 +5369,7 @@
           },
           "executor_account_id": {
             "type": "string",
-            "description": "The OutLayer execution identity — register it in the account's extension set (and, for hos_lease, provision its spend grant). NOTE: the response deliberately carries no owner. `owner_account_id` is accepted at PUT as the provisioning receipt House of Stake hands the integrator, and is stored — but it is checked for shape only and compared against nothing, so returning it would present a claim as an established fact. Who holds a leased account is `nft_item_info.owner_id` on chain, and what ends a lane when it changes hands is the rotation pin."
+            "description": "The OutLayer execution identity — register it in the account's extension set (and, for hos_lease, provision its spend grant). NOTE: the response deliberately carries no owner. `owner_account_id` is accepted at PUT as the provisioning receipt House of Stake hands the integrator, and is stored — but it is checked for shape only and compared against nothing, so returning it would present a claim as an established fact. Who holds a leased account is `nft_item_info.owner_id` on chain, and what ends a lane when it changes hands is the rotation pin — the item's `owner_id`, `rotation_epoch` and `rotation_seq` as read at activation: a different owner, or a different seq inside the same epoch, ends the binding; a new epoch under the same owner re-establishes it."
           },
           "binding_status": {
             "type": "string",

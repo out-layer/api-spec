@@ -4358,7 +4358,10 @@ components:
             compared against nothing, so returning it would present a claim as
             an established fact. Who holds a leased account is
             `nft_item_info.owner_id` on chain, and what ends a lane when it
-            changes hands is the rotation pin.
+            changes hands is the rotation pin — the item's `owner_id`,
+            `rotation_epoch` and `rotation_seq` as read at activation: a
+            different owner, or a different seq inside the same epoch, ends
+            the binding; a new epoch under the same owner re-establishes it.
         binding_status:
           type: string
           enum: [pending, active, suspended, revoked]
