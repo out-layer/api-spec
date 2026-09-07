@@ -98,7 +98,7 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
   `request_completed` webhook for withdraw requests.
 - `delivered` documented as `"native_near"` or `"nep141:<contract>"` — see
   issue
-  [fastnear/near-outlayer#25](https://github.com/fastnear/near-outlayer/issues/25)
+  [out-layer/outlayer#25](https://github.com/out-layer/outlayer/issues/25)
   for the bug this resolves (the coordinator used to emit `"wnear"` for every
   NEP-141 transfer, including USDC, regardless of the actual on-chain effect).
 - `DepositIntentRequest.BySourceAsset` branch — request body now formally
@@ -185,7 +185,7 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
   legacy `{ chain, token }` shape also now accepts `chain="near"` (was
   rejected with HTTP 400). Schema unchanged for the legacy shape; only
   observable response values changed. Fixes
-  [fastnear/near-outlayer#25 Issue A](https://github.com/fastnear/near-outlayer/issues/25).
+  [out-layer/outlayer#25 Issue A](https://github.com/out-layer/outlayer/issues/25).
 - **Multisig-approved withdraws now run the same pre-checks as the
   synchronous path** (recipient storage / balance / account-existence).
   Approved withdraws to a non-existent named NEAR account now fail with
