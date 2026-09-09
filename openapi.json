@@ -4558,7 +4558,8 @@
           },
           "version_key": {
             "type": "string",
-            "description": "Pin a specific published version instead of the active one."
+            "pattern": "^[A-Za-z0-9._-]{1,128}$",
+            "description": "Pin a specific published version instead of the active one.\nRefused with `invalid_version_key` (400) on a connector project:\nconnectors run their active version only, since an older version\nwould run an older manifest and older code under the curated name.\n"
           },
           "use_bound_identity": {
             "type": "boolean",
