@@ -164,6 +164,14 @@
             "schema": {
               "$ref": "#/components/schemas/Chain"
             }
+          },
+          {
+            "name": "sub_path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SubPath"
+            }
           }
         ],
         "responses": {
@@ -4934,10 +4942,32 @@
           "optimism",
           "bsc",
           "avalanche",
+          "hyperevm",
           "solana",
           "bitcoin"
         ],
-        "description": "Supported chain identifier. The EVM chains (ethereum, polygon, base, arbitrum, optimism, bsc, avalanche) all share ONE derived address (a single secp256k1 key) and are signable via `/wallet/v1/evm/*`. `solana` has its own derived ed25519 address and is signable via `/wallet/v1/solana/*`. `bitcoin` can be derived in the keystore but is not yet serviced by wallet v1."
+        "description": "Supported chain identifier. The EVM chains (ethereum, polygon, base, arbitrum, optimism, bsc, avalanche, hyperevm) all share ONE derived address (a single secp256k1 key) and are signable via `/wallet/v1/evm/*`; `hyperevm` (Hyperliquid's EVM, chain id 999) is signable but not a deposit or withdraw chain. `solana` has its own derived ed25519 address and is signable via `/wallet/v1/solana/*`. `bitcoin` can be derived in the keystore but is not yet serviced by wallet v1. An endpoint that serves fewer chains than this list (balance, transfer and delete are NEAR-only; withdraw takes `WithdrawChain`) answers 400 for the ones it does not."
+      },
+      "SubPath": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+        "description": "A sub-key of the wallet's EVM key: a distinct secp256k1 key, and so a distinct `0x` address, of the same wallet (`subkey:{id}:evm:{sub_path}` in the keystore). Omitted or empty means the wallet's own key. EVM chains only; a Solana or NEAR endpoint refuses it. A sub-key is a separate address under the wallet's one authority, not a separate authority: any holder of the wallet's API key can sign for any path, and the same `evm_sign` capability governs every path. Nothing about a sub-key is stored; its address is derived on request, like the wallet's own."
+      },
+      "WithdrawChain": {
+        "type": "string",
+        "enum": [
+          "near",
+          "solana",
+          "ethereum",
+          "base",
+          "arbitrum",
+          "bitcoin",
+          "bsc",
+          "polygon",
+          "optimism",
+          "avalanche"
+        ],
+        "description": "A chain funds can be withdrawn to: `near` directly, the rest through the 1Click bridge. Narrower than `Chain` — `hyperevm` is signable but not bridged."
       },
       "RequestType": {
         "type": "string",
@@ -5150,6 +5180,9 @@
           },
           "chain": {
             "$ref": "#/components/schemas/Chain"
+          },
+          "sub_path": {
+            "$ref": "#/components/schemas/SubPath"
           },
           "address": {
             "type": "string"
@@ -5930,7 +5963,7 @@
         ],
         "properties": {
           "chain": {
-            "$ref": "#/components/schemas/Chain"
+            "$ref": "#/components/schemas/WithdrawChain"
           },
           "to": {
             "type": "string",
@@ -7101,6 +7134,9 @@
           "chain": {
             "$ref": "#/components/schemas/Chain"
           },
+          "sub_path": {
+            "$ref": "#/components/schemas/SubPath"
+          },
           "typed_data": {
             "type": "object",
             "description": "Standard EIP-712 v4 object (as `eth_signTypedData_v4`): `{ domain, types, primaryType, message }`. Arbitrary struct types are supported (incl. EIP-3009 `TransferWithAuthorization` and EIP-2612 `Permit`). The digest is computed server-side — no client-supplied hash is trusted."
@@ -7116,6 +7152,9 @@
         "properties": {
           "chain": {
             "$ref": "#/components/schemas/Chain"
+          },
+          "sub_path": {
+            "$ref": "#/components/schemas/SubPath"
           },
           "message": {
             "type": "string",
@@ -7142,6 +7181,9 @@
           "chain": {
             "$ref": "#/components/schemas/Chain"
           },
+          "sub_path": {
+            "$ref": "#/components/schemas/SubPath"
+          },
           "unsigned_tx": {
             "type": "string",
             "description": "Serialized unsigned transaction, `0x`-hex (e.g. viem `serializeTransaction(tx)`). The service keccak256-hashes and signs it — it does not parse, assemble, or broadcast the transaction."
@@ -7158,7 +7200,10 @@
         "properties": {
           "signature": {
             "type": "string",
-            "description": "65-byte recoverable EVM signature, `0x`-hex (`r‖s‖v`, `v ∈ {27,28}`, low-s). `ecrecover` over the signed digest returns the wallet's EVM address."
+            "description": "65-byte recoverable EVM signature, `0x`-hex (`r‖s‖v`, `v ∈ {27,28}`, low-s). `ecrecover` over the signed digest returns the wallet's EVM address — or, when `sub_path` was given, that sub-key's address from `GET /wallet/v1/address?chain=<evm>&sub_path=<same>`."
+          },
+          "sub_path": {
+            "$ref": "#/components/schemas/SubPath"
           },
           "chain": {
             "$ref": "#/components/schemas/Chain"
