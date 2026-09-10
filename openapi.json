@@ -5380,7 +5380,14 @@
               "suspended",
               "revoked"
             ],
-            "description": "OutLayer's view only, not an attestation of chain state. `pending` until the executor is first observed live in the extension set; `suspended` on reversible faults (freeze, non-Active state, unsupported impl_version, unrecognized code hash); `revoked` is terminal (extension removed, lease/state expired, ownership rotated, or DELETE)."
+            "description": "OutLayer's view only, not an attestation of chain state. `pending` until the executor is first observed live in the extension set; `suspended` on reversible faults (freeze, non-Active state, unsupported impl_version, unrecognized code hash); `revoked` is terminal (extension removed, lease/state expired, ownership rotated, or DELETE). Anything but `active` carries `status_reason`."
+          },
+          "status_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the binding is not `active`: the fault class the last observation reported, in the vocabulary a refused spend uses (`AgentConnectDeniedResponse.class` — `executor_not_in_control_set`, `account_frozen`, `unsupported_wallet_implementation`, `unrecognized_wallet_code`, `registry_disagrees`, ...). Absent while `active` and until the first observation; on `revoked`, what ended the lane. A `pending` personal binding reads `executor_not_in_control_set` until the owner adds the executor."
           },
           "impl_version": {
             "type": [

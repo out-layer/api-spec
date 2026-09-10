@@ -6,6 +6,9 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Added
 
+- **Agent Connect** — `status_reason` on `BindingResponse`: why a binding is
+  not `active`, as the fault class of the last observation. Absent while
+  active.
 - **Agent Connect** — `registry_disagrees` on `AgentConnectDeniedResponse.class`:
   a leased account whose collection's `nft_token` does not confirm the
   account's own `nft_item_info`. Reversible (`terminal: false`); the registry
