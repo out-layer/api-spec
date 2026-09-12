@@ -3729,6 +3729,15 @@ components:
             owner.
         secrets_ref:
           type: object
+          description: |
+            The stored secret this run reads: the row `account_id` stored for
+            this project under `profile`, decrypted inside the TEE only if the
+            row's on-chain access condition admits the paying key's owner. On a
+            connector project a body reference is used as it is; without one,
+            `X-Use-Owner-Secret` names the wallet's own row.
+            Refused with `invalid_secrets_ref` (400) when `account_id` is not a
+            NEAR account id or `profile` is empty or longer than 64 characters:
+            the contract stores no such row, so nothing is queued for it.
           properties:
             profile: { type: string }
             account_id: { type: string }
@@ -3924,6 +3933,15 @@ components:
         for any path, and the same `evm_sign` capability governs every path.
         Nothing about a sub-key is stored; its address is derived on request,
         like the wallet's own.
+
+    NearOnlyChain:
+      type: string
+      enum: [near]
+      default: near
+      description: >-
+        `near` is the only value these endpoints take. Narrower than `Chain` on
+        purpose: a transfer or an account delete is a NEAR operation, and naming
+        another chain answers 400 rather than doing something elsewhere.
 
     WithdrawChain:
       type: string
@@ -4642,7 +4660,7 @@ components:
       properties:
         chain:
           allOf:
-            - $ref: '#/components/schemas/Chain'
+            - $ref: '#/components/schemas/NearOnlyChain'
           description: Chain to transfer on. Defaults to `near` server-side.
         to:
           type: string
@@ -4677,7 +4695,7 @@ components:
           example: treasury.near
         chain:
           allOf:
-            - $ref: '#/components/schemas/Chain'
+            - $ref: '#/components/schemas/NearOnlyChain'
           description: Chain the account lives on. Defaults to `near` server-side.
 
     DeleteResponse:

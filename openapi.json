@@ -4576,6 +4576,7 @@
           },
           "secrets_ref": {
             "type": "object",
+            "description": "The stored secret this run reads: the row `account_id` stored for\nthis project under `profile`, decrypted inside the TEE only if the\nrow's on-chain access condition admits the paying key's owner. On a\nconnector project a body reference is used as it is; without one,\n`X-Use-Owner-Secret` names the wallet's own row.\nRefused with `invalid_secrets_ref` (400) when `account_id` is not a\nNEAR account id or `profile` is empty or longer than 64 characters:\nthe contract stores no such row, so nothing is queued for it.\n",
             "properties": {
               "profile": {
                 "type": "string"
@@ -4952,6 +4953,14 @@
         "type": "string",
         "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
         "description": "A sub-key of the wallet's EVM key: a distinct secp256k1 key, and so a distinct `0x` address, of the same wallet (`subkey:{id}:evm:{sub_path}` in the keystore). Omitted or empty means the wallet's own key. EVM chains only; a Solana or NEAR endpoint refuses it. A sub-key is a separate address under the wallet's one authority, not a separate authority: any holder of the wallet's API key can sign for any path, and the same `evm_sign` capability governs every path. Nothing about a sub-key is stored; its address is derived on request, like the wallet's own."
+      },
+      "NearOnlyChain": {
+        "type": "string",
+        "enum": [
+          "near"
+        ],
+        "default": "near",
+        "description": "`near` is the only value these endpoints take. Narrower than `Chain` on purpose: a transfer or an account delete is a NEAR operation, and naming another chain answers 400 rather than doing something elsewhere."
       },
       "WithdrawChain": {
         "type": "string",
@@ -5739,7 +5748,7 @@
           "chain": {
             "allOf": [
               {
-                "$ref": "#/components/schemas/Chain"
+                "$ref": "#/components/schemas/NearOnlyChain"
               }
             ],
             "description": "Chain to transfer on. Defaults to `near` server-side."
@@ -5775,7 +5784,7 @@
           "chain": {
             "allOf": [
               {
-                "$ref": "#/components/schemas/Chain"
+                "$ref": "#/components/schemas/NearOnlyChain"
               }
             ],
             "description": "Chain the account lives on. Defaults to `near` server-side."
