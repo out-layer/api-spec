@@ -3550,6 +3550,16 @@
               }
             }
           },
+          "400": {
+            "description": "The request itself is wrong; `reason` says how:\n`invalid_secrets_ref` (the body's `secrets_ref` names a row the\ncontract could never hold — see `ProjectCallRequest.secrets_ref`),\n`invalid_version_key`, `bad_key_format`, `max_per_call_exceeded`,\n`compute_limit_too_low`. A body that is not JSON at all is\nanswered by the framework with a plain-text 400 (and a missing\nJSON content type with 415), not with this schema.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallRefusal"
+                }
+              }
+            }
+          },
           "401": {
             "description": "No payment credential, or one that cannot pay. `reason` tells the two apart: `missing_payment_key` for a caller that sent nothing, and `wk_is_not_a_payer` for one that sent a `wk_` — that credential names a wallet on /wallet/v1/*, it does not buy anything here.\n",
             "content": {
@@ -4576,7 +4586,7 @@
           },
           "secrets_ref": {
             "type": "object",
-            "description": "The stored secret this run reads: the row `account_id` stored for\nthis project under `profile`, decrypted inside the TEE only if the\nrow's on-chain access condition admits the paying key's owner. On a\nconnector project a body reference is used as it is; without one,\n`X-Use-Owner-Secret` names the wallet's own row.\nRefused with `invalid_secrets_ref` (400) when `account_id` is not a\nNEAR account id or `profile` is empty or longer than 64 characters:\nthe contract stores no such row, so nothing is queued for it.\n",
+            "description": "The stored secret this run reads: the row `account_id` stored for\nthis project under `profile`, decrypted inside the TEE only if the\nrow's on-chain access condition admits the paying key's owner. On a\nconnector project a body reference is used as it is; without one,\n`X-Use-Owner-Secret` names the wallet's own row.\nRefused with `invalid_secrets_ref` (400) when `account_id` is not a\nNEAR account id or `profile` is not 1–64 bytes or holds an ASCII\ncharacter other than a letter, digit, `-` or `_`: the contract\nstores no such row, so nothing is queued for it. A body whose\nfields are not strings is rejected as a body-shape error (422)\nbefore this check.\n",
             "properties": {
               "profile": {
                 "type": "string"
@@ -4675,6 +4685,8 @@
               "insufficient_balance",
               "internal_error",
               "invalid_key",
+              "invalid_secrets_ref",
+              "invalid_version_key",
               "keystore_error",
               "max_per_call_exceeded",
               "missing_payment_key",
