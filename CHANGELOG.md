@@ -4,6 +4,14 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+### Fixed
+
+- **Agent Connect** — `POST /wallet/v1/binding/events` checks the shared secret
+  before reading the body. An unauthenticated caller is answered `401`
+  whatever it sends, where a malformed body used to be answered `422` — the
+  code this API reserves for `OnChainTxFailed`. An authenticated caller whose
+  body cannot be read gets `400`.
+
 ### Added
 
 - **Agent Connect** — `status_reason` on `BindingResponse`: why a binding is

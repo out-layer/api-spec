@@ -488,6 +488,16 @@ paths:
                   binding_status:
                     type: string
                     enum: [pending, active, suspended, revoked, unbound]
+        '400':
+          description: >-
+            The secret was accepted and the body could not be read as an
+            event. Deliberately not `422`: in this API that code means the
+            chain answered and a receipt failed (`OnChainTxFailed`), and a
+            client routing on it must not meet it here.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
