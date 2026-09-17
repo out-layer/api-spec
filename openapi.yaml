@@ -2614,6 +2614,12 @@ paths:
       description: |
         Returns the wallet's current policy (decrypted by the keystore TEE),
         plus the current usage counters used by velocity-limit checks.
+
+        `policy` states whether a policy exists at all: `none` — no policy is
+        stored and every operation is allowed; `stored` — the `rules`,
+        `approval`, `capabilities` and `authorized_key_hashes` fields are the
+        policy as written. A response without `policy` could not read the
+        chain; it says nothing about the policy rather than guessing.
       responses:
         '200':
           description: Current policy + usage
@@ -5882,6 +5888,21 @@ components:
           description: NEAR account that owns the policy.
         frozen:
           type: boolean
+        policy:
+          type: string
+          enum: [none, stored]
+          description: |
+            Whether the wallet has a policy at all. `none`: no policy is
+            stored — every operation is allowed (the engine's own rules,
+            which no policy relaxes, still hold: account-control operations
+            on the extension door are refused for every wallet). `stored`:
+            a policy exists and `rules`, `approval`, `capabilities` and
+            `authorized_key_hashes` are it, as written — every capability
+            it does not name is at that capability's default, which is DENY
+            for all but `sign_message`. Absent when the coordinator could not
+            read the chain or decrypt what it holds. This is a statement of
+            presence, not a rendering of what the policy permits; the
+            keystore's evaluator decides that.
         rules:
           $ref: '#/components/schemas/PolicyRules'
         approval:
@@ -5896,8 +5917,10 @@ components:
           type: object
           additionalProperties: {}
           description: |
-            Current accumulated usage per token, per period. Same shape as
-            `PolicyLimits` — used for client-side velocity-limit visualization.
+            Current accumulated usage per token, per period — spent amounts
+            from the coordinator's counters, present whether or not a policy
+            is stored. Same shape as `PolicyLimits` — used for client-side
+            velocity-limit visualization.
 
     EncryptPolicyRequest:
       type: object
