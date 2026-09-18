@@ -4,10 +4,10 @@ OpenAPI 3.1 specification for the OutLayer HTTP API.
 
 This repo is the **single source of truth** for the OutLayer wire format. The TypeScript SDK ([`@outlayer/sdk`](https://github.com/out-layer/sdk-js)), the dashboard docs, and any future language bindings consume this spec.
 
-- **Interactive docs**: https://api.outlayer.fastnear.com/docs (Scalar UI)
-- **Raw spec**: https://api.outlayer.fastnear.com/openapi.json
+- **Interactive docs**: https://api.outlayer.ai/docs (Scalar UI)
+- **Raw spec**: https://api.outlayer.ai/openapi.json
 - **TypeScript SDK**: [`@outlayer/sdk`](https://www.npmjs.com/package/@outlayer/sdk)
-- **OutLayer documentation**: https://outlayer.fastnear.com/docs
+- **OutLayer documentation**: https://outlayer.ai/docs
 
 ## Coverage
 
@@ -43,15 +43,15 @@ await client.withdraw({ chain: 'ethereum', to: '0x...', amount: '1000000', token
 
 ```bash
 # TypeScript
-npx openapi-typescript https://api.outlayer.fastnear.com/openapi.json -o types.ts
+npx openapi-typescript https://api.outlayer.ai/openapi.json -o types.ts
 
 # Python
 pip install openapi-python-client
-openapi-python-client generate --url https://api.outlayer.fastnear.com/openapi.json
+openapi-python-client generate --url https://api.outlayer.ai/openapi.json
 
 # Go
 go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
-oapi-codegen -generate types https://api.outlayer.fastnear.com/openapi.json > types.go
+oapi-codegen -generate types https://api.outlayer.ai/openapi.json > types.go
 
 # Rust
 cargo install progenitor-impl --bin progenitor
@@ -61,7 +61,7 @@ The spec uses OpenAPI 3.1.0 (JSON Schema 2020-12 compatible), so any modern gene
 
 ### Browse the spec
 
-- **Scalar UI** (interactive, with code samples): https://api.outlayer.fastnear.com/docs
+- **Scalar UI** (interactive, with code samples): https://api.outlayer.ai/docs
 - **Spec file**: [`openapi.yaml`](openapi.yaml)
 
 ## Local development

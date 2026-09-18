@@ -4,20 +4,24 @@
     "title": "OutLayer API",
     "version": "0.1.0-alpha.1",
     "summary": "HTTP API for OutLayer custody wallets and policy enforcement",
-    "description": "OutLayer Agent Custody — multi-chain wallets for AI agents with TEE-enforced\npolicy, multisig approvals, audit log, gasless cross-chain transfers via\nNEAR Intents, and off-chain EVM signing (EIP-712 typed data, EIP-191\npersonal_sign, and client-serialized raw transactions).\n\nPrivate keys live exclusively inside an Intel TDX TEE and are derived from\nNEAR MPC. The wallet owner sets policy (spending limits, whitelists,\nmultisig, freeze) — all enforced inside the TEE before signing.\n\nSee [CUSTODY docs](https://outlayer.fastnear.com/docs/agent-custody) for the\narchitectural overview and [@outlayer/sdk](https://www.npmjs.com/package/@outlayer/sdk)\nfor the TypeScript client.\n",
+    "description": "OutLayer Agent Custody — multi-chain wallets for AI agents with TEE-enforced\npolicy, multisig approvals, audit log, gasless cross-chain transfers via\nNEAR Intents, and off-chain EVM signing (EIP-712 typed data, EIP-191\npersonal_sign, and client-serialized raw transactions).\n\nPrivate keys live exclusively inside an Intel TDX TEE and are derived from\nNEAR MPC. The wallet owner sets policy (spending limits, whitelists,\nmultisig, freeze) — all enforced inside the TEE before signing.\n\nSee [CUSTODY docs](https://outlayer.ai/docs/agent-custody) for the\narchitectural overview and [@outlayer/sdk](https://www.npmjs.com/package/@outlayer/sdk)\nfor the TypeScript client.\n",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
     },
     "contact": {
       "name": "OutLayer",
-      "url": "https://outlayer.fastnear.com"
+      "url": "https://outlayer.ai"
     }
   },
   "servers": [
     {
-      "url": "https://api.outlayer.fastnear.com",
-      "description": "Production"
+      "url": "https://api.outlayer.ai",
+      "description": "Mainnet"
+    },
+    {
+      "url": "https://testnet-api.outlayer.ai",
+      "description": "Testnet — the same API, against NEAR testnet. Pick this one to try a call without spending anything real; a mainnet key does not work here, and a testnet key does not work on mainnet."
     }
   ],
   "security": [
@@ -124,7 +128,7 @@
                       "wallet_id": "9c3c9e10-1c1f-4f5e-9c4a-1d7b9a8f3c20",
                       "api_key": "wk_2a8b1f3c4d5e6789abcdef0123456789",
                       "near_account_id": "9c3c9e101c1f4f5e9c4a1d7b9a8f3c20",
-                      "handoff_url": "https://outlayer.fastnear.com/wallet?api_key=wk_2a8b...",
+                      "handoff_url": "https://outlayer.ai/wallet?api_key=wk_2a8b...",
                       "trial": {
                         "calls_remaining": 100,
                         "expires_at": "2026-06-20T00:00:00Z",
@@ -5183,7 +5187,7 @@
       },
       "RegisterRequest": {
         "type": "object",
-        "description": "For the common case (anonymous wallet on OutLayer's shared master),\nsend empty `{}`. Optional fields enable advanced flows:\n\n- `vault_id`: bind this wallet to an existing customer-owned vault,\n  so the wallet's master is derived through the vault's per-customer\n  MPC-derived master instead of OutLayer's shared default. The vault\n  must already be deployed and verified — **vault deployment is not\n  done through this endpoint**. Use the dashboard\n  (https://outlayer.fastnear.com/vault) or the CLI\n  (`outlayer vault init`) to deploy. Reference:\n  https://outlayer.fastnear.com/docs/vaults\n- `account_id` + `pubkey` + `message` + `signature`: bind the wallet\n  to a verified NEAR account via NEP-413 proof-of-ownership. Used\n  by clients that want operational keys (`wk_...`) tied to a real\n  NEAR account.\n",
+        "description": "For the common case (anonymous wallet on OutLayer's shared master),\nsend empty `{}`. Optional fields enable advanced flows:\n\n- `vault_id`: bind this wallet to an existing customer-owned vault,\n  so the wallet's master is derived through the vault's per-customer\n  MPC-derived master instead of OutLayer's shared default. The vault\n  must already be deployed and verified — **vault deployment is not\n  done through this endpoint**. Use the dashboard\n  (https://outlayer.ai/vault) or the CLI\n  (`outlayer vault init`) to deploy. Reference:\n  https://outlayer.ai/docs/vaults\n- `account_id` + `pubkey` + `message` + `signature`: bind the wallet\n  to a verified NEAR account via NEP-413 proof-of-ownership. Used\n  by clients that want operational keys (`wk_...`) tied to a real\n  NEAR account.\n",
         "properties": {
           "account_id": {
             "type": "string",

@@ -13,7 +13,7 @@ info:
     NEAR MPC. The wallet owner sets policy (spending limits, whitelists,
     multisig, freeze) — all enforced inside the TEE before signing.
 
-    See [CUSTODY docs](https://outlayer.fastnear.com/docs/agent-custody) for the
+    See [CUSTODY docs](https://outlayer.ai/docs/agent-custody) for the
     architectural overview and [@outlayer/sdk](https://www.npmjs.com/package/@outlayer/sdk)
     for the TypeScript client.
   license:
@@ -21,11 +21,15 @@ info:
     identifier: MIT
   contact:
     name: OutLayer
-    url: https://outlayer.fastnear.com
+    url: https://outlayer.ai
 
 servers:
-  - url: https://api.outlayer.fastnear.com
-    description: Production
+  - url: https://api.outlayer.ai
+    description: Mainnet
+  - url: https://testnet-api.outlayer.ai
+    description: Testnet — the same API, against NEAR testnet. Pick this one to try a
+      call without spending anything real; a mainnet key does not work here, and a
+      testnet key does not work on mainnet.
 
 security:
   - BearerAuth: []
@@ -155,7 +159,7 @@ paths:
                     wallet_id: 9c3c9e10-1c1f-4f5e-9c4a-1d7b9a8f3c20
                     api_key: wk_2a8b1f3c4d5e6789abcdef0123456789
                     near_account_id: 9c3c9e101c1f4f5e9c4a1d7b9a8f3c20
-                    handoff_url: https://outlayer.fastnear.com/wallet?api_key=wk_2a8b...
+                    handoff_url: https://outlayer.ai/wallet?api_key=wk_2a8b...
                     trial:
                       calls_remaining: 100
                       expires_at: '2026-06-20T00:00:00Z'
@@ -4189,9 +4193,9 @@ components:
           MPC-derived master instead of OutLayer's shared default. The vault
           must already be deployed and verified — **vault deployment is not
           done through this endpoint**. Use the dashboard
-          (https://outlayer.fastnear.com/vault) or the CLI
+          (https://outlayer.ai/vault) or the CLI
           (`outlayer vault init`) to deploy. Reference:
-          https://outlayer.fastnear.com/docs/vaults
+          https://outlayer.ai/docs/vaults
         - `account_id` + `pubkey` + `message` + `signature`: bind the wallet
           to a verified NEAR account via NEP-413 proof-of-ownership. Used
           by clients that want operational keys (`wk_...`) tied to a real
