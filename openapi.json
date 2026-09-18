@@ -40,7 +40,7 @@
     },
     {
       "name": "Connectors",
-      "description": "The curated connectors: named, priced operations that reach an outside service — a mailbox, a bank, a trading venue — from inside the same enclave that holds the caller's keys, so a credential is used without ever being handed over. A connector is an ordinary project under `connectors.outlayer.near` (`connectors.outlayer.testnet` on testnet) and is called through `POST /call/{owner}/{project}` like any other; what being curated adds is a price per `operation` on chain, a daily quota per wallet, and the right to read a secret its owner stored for it.\n\nWhich ones exist here, and the skill describing each, come from `GET /public/connectors`. What one SELLS is not listed in this spec: its operations and their prices are on chain, and the connector's own free `status` operation answers with them, as does a refusal — which names what could have been asked for instead.\n\nEvery connector publishes an agent-facing skill at `https://skills.outlayer.ai/<id>-connector/SKILL.md`, and how to call any of them — which key pays, how to be granted an owner's credential — is in `https://skills.outlayer.ai/outlayer-connectors/SKILL.md`."
+      "description": "The curated connectors: named, priced operations that reach an outside service — a mailbox, a bank, a trading venue — from inside the same enclave that holds the caller's keys, so a credential is used without ever being handed over. A connector is an ordinary project under `connectors.outlayer.near` (`connectors.outlayer.testnet` on testnet) and is called through `POST /call/{owner}/{project}` like any other; what being curated adds is a price per `operation` on chain and the right to read a secret its owner stored for it. A caller who pays is never limited by a count of calls — money bounds a funded key, an allowance bounds a subscriber — and the one count there is belongs to the trial: ten calls, in a wallet's first week (`POST /trial-key`).\n\nWhich ones exist here, and the skill describing each, come from `GET /public/connectors`. What one SELLS is not listed in this spec: its operations and their prices are on chain, and the connector's own free `status` operation answers with them, as does a refusal — which names what could have been asked for instead.\n\nEvery connector publishes an agent-facing skill at `https://skills.outlayer.ai/<id>-connector/SKILL.md`, and how to call any of them — which key pays, how to be granted an owner's credential — is in `https://skills.outlayer.ai/outlayer-connectors/SKILL.md`."
     },
     {
       "name": "Subscriptions",
@@ -128,15 +128,13 @@
                       "wallet_id": "9c3c9e10-1c1f-4f5e-9c4a-1d7b9a8f3c20",
                       "api_key": "wk_2a8b1f3c4d5e6789abcdef0123456789",
                       "near_account_id": "9c3c9e101c1f4f5e9c4a1d7b9a8f3c20",
-                      "handoff_url": "https://outlayer.ai/wallet?api_key=wk_2a8b...",
+                      "handoff_url": "https://app.outlayer.ai/wallet?key=wk_2a8b...",
                       "trial": {
-                        "calls_remaining": 100,
-                        "expires_at": "2026-06-20T00:00:00Z",
-                        "limits": {
-                          "max_instructions": 100000000,
-                          "max_execution_seconds": 30,
-                          "max_memory_mb": 64
-                        }
+                        "available": true,
+                        "calls": 10,
+                        "days": 7,
+                        "claim_url": "POST /trial-key",
+                        "scope": "connectors.outlayer.near/*"
                       }
                     }
                   }
@@ -3589,7 +3587,7 @@
             }
           },
           "402": {
-            "description": "The key cannot pay for this call.",
+            "description": "The key cannot pay for this call. `reason` says which way:\n\n* `trial_exhausted` — a TRIAL key has made its calls (`used`, `limit`).\n  **`terminal: true`**. Create a payment key with money on it\n  (`POST /wallet/v1/create-payment-key`) — a funded key has no call\n  limit;\n* `trial_expired` — a TRIAL key past the wallet's first week\n  (`expires_at`), with calls left or not. **`terminal: true`**, and\n  the same next step. A trial stops starting calls shortly before\n  `expires_at`, so that none is cut off mid-run;\n* `insufficient_balance`, `out_of_funds`, `insufficient_allowance` —\n  money, as their names say;\n* `expires_too_soon` — the subscription ends before this operation\n  could finish; extend it;\n* `allowance_no_deposit` — `X-Attached-Deposit` on a call paid from\n  an allowance, which is not money and cannot be paid to a developer.\n",
             "content": {
               "application/json": {
                 "schema": {
@@ -3599,7 +3597,7 @@
             }
           },
           "403": {
-            "description": "The key's scope does not include this project.",
+            "description": "The key may not make this call. By `reason`: `project_not_allowed`\n— its scope does not include this project; `no_deposit` — a key whose\nvalue was given (a trial, a grant) sent `X-Attached-Deposit`;\n`tee_session_required`, `vault_not_verified`, `wallet_not_yours` —\nthe wallet or vault named does not stand behind this caller.\n",
             "content": {
               "application/json": {
                 "schema": {
@@ -3629,7 +3627,7 @@
             }
           },
           "429": {
-            "description": "Three different refusals share this status, and a caller tells them\napart by `reason` rather than by the code:\n\n* `call_already_in_flight` — an ALLOWANCE runs one call at a time.\n  **`terminal: false`**: it clears by itself when the call in flight\n  finishes, so the move is to wait, or to fund the key (money is not\n  limited this way, and a funded key answers both at once);\n* `connector_quota_exceeded` — the wallet's daily connector quota,\n  which widens with the wallet's age and is independent of paying;\n* a plain rate limit, with no `reason`.\n",
+            "description": "Three different refusals share this status, and a caller tells them\napart by `reason` rather than by the code:\n\n* `call_already_in_flight` — an ALLOWANCE runs one call at a time.\n  **`terminal: false`**: it clears by itself when the call in flight\n  finishes, so the move is to wait, or to fund the key (money is not\n  limited this way, and a funded key answers both at once);\n* `operation_limit_reached` — a connector's own ceiling on one\n  operation (a technical cap against a loop), with `limit`,\n  `window`, `operation` and `retry_after_seconds`;\n* `rate_limit_exceeded` — this key's calls per minute. A request\n  stopped earlier, by the per-address limiter, is a bare 429 with no\n  `reason`.\n\nNone of them is a quota on how many calls a paying caller may make:\nthere is no such quota.\n",
             "content": {
               "application/json": {
                 "schema": {
@@ -3642,18 +3640,32 @@
                       "type": "string",
                       "enum": [
                         "call_already_in_flight",
-                        "connector_quota_exceeded"
+                        "operation_limit_reached",
+                        "rate_limit_exceeded"
                       ]
                     },
                     "terminal": {
                       "type": "boolean",
                       "description": "False means waiting clears it; true means it will not."
                     },
-                    "used": {
-                      "type": "integer"
-                    },
                     "limit": {
-                      "type": "integer"
+                      "type": "integer",
+                      "description": "For `operation_limit_reached` — the ceiling that was reached."
+                    },
+                    "window": {
+                      "type": "string",
+                      "description": "For `operation_limit_reached` — the period the ceiling is counted over, e.g. `day`."
+                    },
+                    "operation": {
+                      "type": "string",
+                      "description": "For `operation_limit_reached` — the operation the ceiling is on."
+                    },
+                    "retry_after_seconds": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "description": "For `operation_limit_reached` — how long until the counter expires."
                     }
                   }
                 }
@@ -3731,7 +3743,7 @@
         ],
         "operationId": "createPaymentKey",
         "summary": "Create a payment key for this wallet",
-        "description": "Two transactions on chain: the key's secret is stored, then funded. An\n**agent** key is keyless — it is named after the wallet itself, so the\nresponse carries no `payment_key` to hand out, and a wallet may have\nexactly one.\n",
+        "description": "Two transactions on chain: the key's secret is stored, then funded. The\nresponse carries `payment_key` (`owner:nonce:secret`), shown once — it\nis what `/call` takes as `X-Payment-Key`.\n",
         "requestBody": {
           "required": true,
           "content": {
@@ -3816,7 +3828,7 @@
             }
           },
           "401": {
-            "description": "No credential, or — with a `wk_` — a wallet that has no agent key\nyet, which answers `Missing X-Payment-Key header`. That is the reply\nto \"which key of yours should I report on\", not a rejected `wk_`:\ncreate the agent key with `create-payment-key {\"agent\": true}`.\n",
+            "description": "No `X-Payment-Key`. The report is on one payment key, so that key is\nwhat is presented — a `wk_` alone does not name one. A wallet gets a\nkey from `POST /trial-key` or `POST /wallet/v1/create-payment-key`.\n",
             "content": {
               "application/json": {
                 "schema": {
@@ -3835,7 +3847,7 @@
         ],
         "operationId": "purchaseAllowance",
         "summary": "Turn balance already on a key into allowance",
-        "description": "Buys a plan out of the key's own balance. Needs a key STRING, so it is\nfor ordinary payment keys: an agent's key has none — it is named after\nthe wallet — and an agent's subscription is bought on chain instead,\nwith an `ft_transfer_call` carrying\n`{\"action\":\"buy_subscription\",\"nonce\":N,\"owner\":\"<agent>\",\"plan\":0}`.\n\nOnly the plan's PRICE is spent; an overpayment stays on the key as\nbalance. The allowance ADDS to whatever is there and validity extends\nfrom `max(now, expires_at)`, so buying again never shortens what is\nalready paid for.\n\nA `wk_` is deliberately NOT accepted here: it is a read credential, and\nspending on the owner's behalf is not something a compromised agent\nshould be able to do.\n",
+        "description": "Buys a plan out of the key's own balance. The same plan can be bought\non chain for any key, with an `ft_transfer_call` carrying\n`{\"action\":\"buy_subscription\",\"nonce\":N,\"owner\":\"<key owner>\",\"plan\":0}`.\n\nOnly the plan's PRICE is spent; an overpayment stays on the key as\nbalance. The allowance ADDS to whatever is there and validity extends\nfrom `max(now, expires_at)`, so buying again never shortens what is\nalready paid for.\n\nA `wk_` is deliberately NOT accepted here: it runs a wallet and does not\nspend a payment key's balance.\n",
         "security": [
           {
             "PaymentKeyAuth": []
@@ -3985,8 +3997,8 @@
           "Subscriptions"
         ],
         "operationId": "claimTrialKey",
-        "summary": "Claim this wallet's one trial key",
-        "description": "A real payment key, granted rather than sold, and spent exactly like any\nother — same header, same balance endpoint, same refusals.\n\nWhat makes it a trial: its value is an ALLOWANCE (never withdrawable, it\nends at its expiry), it is a GRANT (it cannot pay a developer through\n`X-Attached-Deposit`), and it is SCOPED to the curated connector\nnamespace, so it cannot run arbitrary code at our expense. It carries no\nwallet, so a trial call gets no custody host functions.\n\nOne per wallet, claimable within a window after the wallet is created;\nthe window, the days and the allowance are operator settings, and the\nanswer states the ones it granted. There is also a per-IP cap.\n\n**The key string is shown once and cannot be re-issued.**\n",
+        "summary": "Claim this wallet's trial — ten connector calls in its first week",
+        "description": "**A trial is ten connector calls, within seven days of the wallet's\ncreation.** That is all of it. The answer is a payment key, sent as\n`X-Payment-Key` like any other, plus how many calls it makes and when it\nstops working.\n\n* The week is counted from the WALLET's creation, not from the claim: a\n  trial claimed on day six works for one day. Claim it when you register.\n* A call counts once it is accepted and queued, whatever becomes of it\n  afterwards — a run that fails or times out is still one of the ten. A\n  refused attempt costs nothing.\n* The eleventh call answers `402 trial_exhausted`, and any call after the\n  week `402 trial_expired` — both `terminal: true`. The next step is a\n  payment key with money on it (`POST /wallet/v1/create-payment-key`),\n  and **a funded key has no call limit at all**.\n* It reaches the curated connectors and nothing else; any other project\n  is refused as `project_not_allowed`. It cannot pay a developer through\n  `X-Attached-Deposit` and cannot be withdrawn.\n* `GET /subscription/status` with the key reports\n  `trial: { calls, calls_used, calls_left }`. There is no balance to\n  read: a trial is not measured in money.\n\nOne per wallet.\n**The key string is shown once and cannot be re-issued.**\n",
         "security": [
           {
             "BearerAuth": []
@@ -3994,11 +4006,19 @@
         ],
         "responses": {
           "200": {
-            "description": "The claimed key and its terms.",
+            "description": "The claimed key and what it is good for.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "required": [
+                    "payment_key",
+                    "owner",
+                    "nonce",
+                    "calls",
+                    "expires_at",
+                    "project_ids"
+                  ],
                   "properties": {
                     "payment_key": {
                       "type": "string",
@@ -4010,11 +4030,14 @@
                     "nonce": {
                       "type": "integer"
                     },
-                    "allowance_usd": {
-                      "type": "string"
+                    "calls": {
+                      "type": "integer",
+                      "description": "How many connector calls this key makes. The whole of a trial's budget."
                     },
-                    "days": {
-                      "type": "integer"
+                    "expires_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "When the key stops working, used up or not — the wallet's creation plus the trial's days."
                     },
                     "project_ids": {
                       "type": "array",
@@ -4022,6 +4045,9 @@
                         "type": "string"
                       },
                       "description": "Anything else is refused as `project_not_allowed`."
+                    },
+                    "note": {
+                      "type": "string"
                     }
                   }
                 }
@@ -4029,10 +4055,54 @@
             }
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "description": "`unauthorized` — no `wk_`, or one that is unknown or revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialKeyRefusal"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`trial_window_closed` — the wallet is past its first week. `trial_unavailable` — no trial is offered to this caller. Both terminal: the way forward is a funded payment key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialKeyRefusal"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`trial_disabled` — this deployment offers no trial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialKeyRefusal"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Already claimed, or claimed too late for this wallet's age."
+            "description": "`trial_already_claimed` — this wallet has had its one. Terminal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialKeyRefusal"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`internal_error` — the key could not be issued right now. `terminal: false`: the same request works later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialKeyRefusal"
+                }
+              }
+            }
           }
         }
       }
@@ -4097,6 +4167,97 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/payment-keys/balance": {
+      "get": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "operationId": "paymentKeyBalance",
+        "summary": "What is left on the key presented",
+        "description": "The key reports on itself. Money is `available`; a subscriber also gets\nthe two allowance figures; a TRIAL key gets `trial` instead of them —\na trial is a number of calls and has no balance to read.\n",
+        "security": [
+          {
+            "PaymentKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The key's money, and its allowance or trial when it has one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "owner": {
+                      "type": "string"
+                    },
+                    "nonce": {
+                      "type": "integer"
+                    },
+                    "initial_balance": {
+                      "type": "string"
+                    },
+                    "spent": {
+                      "type": "string"
+                    },
+                    "reserved": {
+                      "type": "string"
+                    },
+                    "available": {
+                      "type": "string",
+                      "description": "Money only, in minimal stablecoin units."
+                    },
+                    "last_used_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "is_grant": {
+                      "type": "boolean",
+                      "description": "The value on the key was given, not paid in: it cannot be withdrawn or attached as a deposit."
+                    },
+                    "expires_at": {
+                      "type": "string",
+                      "description": "When an allowance or a trial ends. Absent without one."
+                    },
+                    "trial": {
+                      "type": "object",
+                      "description": "A trial key only. The allowance figures are then absent.",
+                      "properties": {
+                        "calls": {
+                          "type": "integer"
+                        },
+                        "calls_used": {
+                          "type": "integer"
+                        },
+                        "calls_left": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "allowance_usd": {
+                      "type": "string",
+                      "description": "Subscribers only."
+                    },
+                    "allowance_available_usd": {
+                      "type": "string",
+                      "description": "Subscribers only — what is left, counting expiry."
+                    },
+                    "withdrawable": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No `X-Payment-Key`, or one that does not match a key."
           }
         }
       }
@@ -4404,7 +4565,7 @@
         "type": "apiKey",
         "in": "header",
         "name": "X-Payment-Key",
-        "description": "A payment key, `{owner}:{nonce}:{secret}`. Created by\n`POST /wallet/v1/create-payment-key` and funded on chain. An AGENT key\nhas no secret to present — it is named after its wallet, and that\nwallet's `Authorization: Bearer wk_...` stands for it.\n"
+        "description": "A payment key, `{owner}:{nonce}:{secret}`. Created by\n`POST /wallet/v1/create-payment-key` and funded on chain, or claimed as a\ntrial with `POST /trial-key`. A wallet's `Authorization: Bearer wk_...`\ndoes not stand in for it: on `/call` it is refused as `wk_is_not_a_payer`.\n"
       }
     },
     "parameters": {
@@ -4742,6 +4903,36 @@
           }
         }
       },
+      "TrialKeyRefusal": {
+        "type": "object",
+        "description": "Every refusal from `POST /trial-key`. Branch on `reason`.",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "The human sentence."
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "unauthorized",
+              "trial_disabled",
+              "trial_window_closed",
+              "trial_already_claimed",
+              "trial_unavailable",
+              "internal_error"
+            ]
+          },
+          "terminal": {
+            "type": "boolean",
+            "description": "`false` only for `internal_error`: the same request works later. Every other refusal is final, and the way forward is a funded payment key."
+          }
+        },
+        "required": [
+          "error",
+          "reason",
+          "terminal"
+        ]
+      },
       "CallRefusal": {
         "type": "object",
         "description": "Every refusal from `POST /call/{owner}/{project}`. `error` is a sentence written for a person and is reworded freely; `reason` is the contract — branch on it. The enum is generated from `CallError::reason()` in the coordinator and is exhaustive there, so a value outside it means the client is older than the server.\n",
@@ -4761,7 +4952,6 @@
               "allowance_no_deposit",
               "bad_key_format",
               "compute_limit_too_low",
-              "connector_quota_exceeded",
               "expires_too_soon",
               "insufficient_allowance",
               "insufficient_balance",
@@ -4782,13 +4972,28 @@
               "upstream_unavailable",
               "tee_session_required",
               "timeout",
-              "too_many_concurrent_calls",
+              "call_already_in_flight",
+              "trial_exhausted",
+              "trial_expired",
               "unknown_operation",
               "vault_not_verified",
               "vault_unlocked",
               "wallet_not_yours",
               "wk_is_not_a_payer"
             ]
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "On `trial_expired` only — when the trial ended."
+          },
+          "used": {
+            "type": "integer",
+            "description": "On `trial_exhausted` only — the calls the trial key has made."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "On `trial_exhausted` — the calls a trial grants. On `operation_limit_reached` — the operation's ceiling, with `window` and `operation` beside it."
           }
         },
         "required": [
@@ -4890,23 +5095,43 @@
           "expired": {
             "type": "boolean"
           },
+          "trial": {
+            "type": "object",
+            "description": "Present for a TRIAL key and for nothing else — and then the three\n`allowance_*` figures are absent. A trial is a number of calls; the\nallowance behind it is the operator's and is not a budget.\n",
+            "properties": {
+              "calls": {
+                "type": "integer",
+                "description": "How many calls a trial is."
+              },
+              "calls_used": {
+                "type": "integer"
+              },
+              "calls_left": {
+                "type": "integer",
+                "description": "Zero means the next call answers `trial_exhausted`."
+              }
+            }
+          },
           "allowance_total_usd": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Absent for a trial key."
           },
           "allowance_spent_usd": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Absent for a trial key."
           },
           "allowance_available_usd": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Absent for a trial key."
           },
           "balance": {
             "type": "string",
@@ -5245,27 +5470,26 @@
       },
       "TrialInfo": {
         "type": "object",
+        "description": "The trial OFFER. Registering grants nothing; the wallet claims its key\nwith `POST /trial-key` when it wants one.\n",
         "properties": {
-          "calls_remaining": {
-            "type": "integer"
+          "available": {
+            "type": "boolean",
+            "description": "Whether this deployment offers a trial at all — not whether this wallet may still claim one."
           },
-          "expires_at": {
+          "calls": {
+            "type": "integer",
+            "description": "How many connector calls a trial is. There is no other budget."
+          },
+          "days": {
+            "type": "integer",
+            "description": "A trial is the wallet's first `days` days, counted from the wallet's creation — it can be claimed until then and stops working then, whenever it was claimed."
+          },
+          "claim_url": {
+            "type": "string"
+          },
+          "scope": {
             "type": "string",
-            "format": "date-time"
-          },
-          "limits": {
-            "type": "object",
-            "properties": {
-              "max_instructions": {
-                "type": "integer"
-              },
-              "max_execution_seconds": {
-                "type": "integer"
-              },
-              "max_memory_mb": {
-                "type": "integer"
-              }
-            }
+            "description": "What a trial key may call."
           }
         }
       },
