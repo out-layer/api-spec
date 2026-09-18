@@ -40,6 +40,29 @@ tags:
       must name, a price it must pay, an owner's secret it may ask for — is
       decided from the project id, not from the way in. Synchronous by default;
       send `async` and poll for anything longer than a few seconds.
+  - name: Connectors
+    description: >-
+      The curated connectors: named, priced operations that reach an outside
+      service — a mailbox, a bank, a trading venue — from inside the same
+      enclave that holds the caller's keys, so a credential is used without ever
+      being handed over. A connector is an ordinary project under
+      `connectors.outlayer.near` (`connectors.outlayer.testnet` on testnet) and
+      is called through `POST /call/{owner}/{project}` like any other; what
+      being curated adds is a price per `operation` on chain, a daily quota per
+      wallet, and the right to read a secret its owner stored for it.
+
+
+      Which ones exist here, and the skill describing each, come from
+      `GET /public/connectors`. What one SELLS is not listed in this spec: its
+      operations and their prices are on chain, and the connector's own free
+      `status` operation answers with them, as does a refusal — which names what
+      could have been asked for instead.
+
+
+      Every connector publishes an agent-facing skill at
+      `https://skills.outlayer.ai/<id>-connector/SKILL.md`, and how to call any
+      of them — which key pays, how to be granted an owner's credential — is in
+      `https://skills.outlayer.ai/outlayer-connectors/SKILL.md`.
   - name: Subscriptions
     description: >-
       Payment keys, the allowance a subscription buys, and the secret an owner
@@ -3310,6 +3333,45 @@ paths:
         '409':
           description: Already claimed, or claimed too late for this wallet's age.
 
+  /public/connectors:
+    get:
+      tags: [Connectors]
+      operationId: publicConnectors
+      summary: Which connectors this deployment offers, and where to read about each
+      description: |
+        The list comes from the same on-chain price table a call is priced by,
+        so a connector named here can be called and one absent here would be
+        refused.
+
+        What each connector SELLS is not repeated here. Its operations and their
+        prices are on chain, and the connector's own free `status` answers with
+        them — as does a refusal, which lists what could have been asked for.
+
+        `description` and `skill` are present for the curated connectors; the
+        test probes are documented in a README beside their code.
+      security: []
+      responses:
+        '200':
+          description: The connectors of this deployment.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  network: { type: string, enum: [mainnet, testnet] }
+                  connectors_account: { type: string }
+                  docs: { type: string }
+                  how_to_call: { type: string }
+                  library_skill: { type: string }
+                  connectors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        project_id: { type: string }
+                        description: { type: string }
+                        skill: { type: string }
   /public/payment-keys/{owner}/{nonce}/balance:
     get:
       tags: [Subscriptions]

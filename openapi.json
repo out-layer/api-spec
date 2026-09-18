@@ -35,6 +35,10 @@
       "description": "Run a project. A connector is an ordinary project we curated and priced, reached through the same route; what being one adds — an `operation` it must name, a price it must pay, an owner's secret it may ask for — is decided from the project id, not from the way in. Synchronous by default; send `async` and poll for anything longer than a few seconds."
     },
     {
+      "name": "Connectors",
+      "description": "The curated connectors: named, priced operations that reach an outside service — a mailbox, a bank, a trading venue — from inside the same enclave that holds the caller's keys, so a credential is used without ever being handed over. A connector is an ordinary project under `connectors.outlayer.near` (`connectors.outlayer.testnet` on testnet) and is called through `POST /call/{owner}/{project}` like any other; what being curated adds is a price per `operation` on chain, a daily quota per wallet, and the right to read a secret its owner stored for it.\n\nWhich ones exist here, and the skill describing each, come from `GET /public/connectors`. What one SELLS is not listed in this spec: its operations and their prices are on chain, and the connector's own free `status` operation answers with them, as does a refusal — which names what could have been asked for instead.\n\nEvery connector publishes an agent-facing skill at `https://skills.outlayer.ai/<id>-connector/SKILL.md`, and how to call any of them — which key pays, how to be granted an owner's credential — is in `https://skills.outlayer.ai/outlayer-connectors/SKILL.md`."
+    },
+    {
       "name": "Subscriptions",
       "description": "Payment keys, the allowance a subscription buys, and the secret an owner leaves for their agent. Only money pays a connector's author: a call covered by an allowance costs the caller nothing at the moment of the call, so nothing passes through."
     },
@@ -3118,7 +3122,7 @@
         ],
         "operationId": "getPolicy",
         "summary": "Get current decrypted policy",
-        "description": "Returns the wallet's current policy (decrypted by the keystore TEE),\nplus the current usage counters used by velocity-limit checks.\n",
+        "description": "Returns the wallet's current policy (decrypted by the keystore TEE),\nplus the current usage counters used by velocity-limit checks.\n\n`policy` states whether a policy exists at all: `none` — no policy is\nstored and every operation is allowed; `stored` — the `rules`,\n`approval`, `capabilities` and `authorized_key_hashes` fields are the\npolicy as written. A response without `policy` could not read the\nchain; it says nothing about the policy rather than guessing.\n",
         "responses": {
           "200": {
             "description": "Current policy + usage",
@@ -4025,6 +4029,70 @@
           },
           "409": {
             "description": "Already claimed, or claimed too late for this wallet's age."
+          }
+        }
+      }
+    },
+    "/public/connectors": {
+      "get": {
+        "tags": [
+          "Connectors"
+        ],
+        "operationId": "publicConnectors",
+        "summary": "Which connectors this deployment offers, and where to read about each",
+        "description": "The list comes from the same on-chain price table a call is priced by,\nso a connector named here can be called and one absent here would be\nrefused.\n\nWhat each connector SELLS is not repeated here. Its operations and their\nprices are on chain, and the connector's own free `status` answers with\nthem — as does a refusal, which lists what could have been asked for.\n\n`description` and `skill` are present for the curated connectors; the\ntest probes are documented in a README beside their code.\n",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The connectors of this deployment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "network": {
+                      "type": "string",
+                      "enum": [
+                        "mainnet",
+                        "testnet"
+                      ]
+                    },
+                    "connectors_account": {
+                      "type": "string"
+                    },
+                    "docs": {
+                      "type": "string"
+                    },
+                    "how_to_call": {
+                      "type": "string"
+                    },
+                    "library_skill": {
+                      "type": "string"
+                    },
+                    "connectors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "project_id": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "skill": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -7324,6 +7392,14 @@
           "frozen": {
             "type": "boolean"
           },
+          "policy": {
+            "type": "string",
+            "enum": [
+              "none",
+              "stored"
+            ],
+            "description": "Whether the wallet has a policy at all. `none`: no policy is\nstored — every operation is allowed (the engine's own rules,\nwhich no policy relaxes, still hold: account-control operations\non the extension door are refused for every wallet). `stored`:\na policy exists and `rules`, `approval`, `capabilities` and\n`authorized_key_hashes` are it, as written — every capability\nit does not name is at that capability's default, which is DENY\nfor all but `sign_message`. Absent when the coordinator could not\nread the chain or decrypt what it holds. This is a statement of\npresence, not a rendering of what the policy permits; the\nkeystore's evaluator decides that.\n"
+          },
           "rules": {
             "$ref": "#/components/schemas/PolicyRules"
           },
@@ -7342,7 +7418,7 @@
           "usage": {
             "type": "object",
             "additionalProperties": {},
-            "description": "Current accumulated usage per token, per period. Same shape as\n`PolicyLimits` — used for client-side velocity-limit visualization.\n"
+            "description": "Current accumulated usage per token, per period — spent amounts\nfrom the coordinator's counters, present whether or not a policy\nis stored. Same shape as `PolicyLimits` — used for client-side\nvelocity-limit visualization.\n"
           }
         }
       },
