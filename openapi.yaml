@@ -4154,13 +4154,14 @@ components:
     # ----- Primitives -----
     Chain:
       type: string
-      enum: [near, ethereum, polygon, base, arbitrum, optimism, bsc, avalanche, hyperevm, solana, bitcoin]
+      enum: [near, ethereum, polygon, base, arbitrum, optimism, bsc, avalanche, hyperevm, hood, solana, bitcoin]
       description: >-
         Supported chain identifier. The EVM chains (ethereum, polygon, base,
-        arbitrum, optimism, bsc, avalanche, hyperevm) all share ONE derived
+        arbitrum, optimism, bsc, avalanche, hyperevm, hood) all share ONE derived
         address (a single secp256k1 key) and are signable via
         `/wallet/v1/evm/*`; `hyperevm` (Hyperliquid's EVM, chain id 999) is
-        signable but not a deposit or withdraw chain.
+        signable but not a deposit or withdraw chain. `hood` is Robinhood Chain,
+        an Arbitrum L2 that bridges both ways through 1Click.
         `solana` has its own derived ed25519 address and is signable via
         `/wallet/v1/solana/*`. `bitcoin` can be derived in the keystore but is
         not yet serviced by wallet v1. An endpoint that serves fewer chains
@@ -4192,7 +4193,7 @@ components:
 
     WithdrawChain:
       type: string
-      enum: [near, solana, ethereum, base, arbitrum, bitcoin, bsc, polygon, optimism, avalanche]
+      enum: [near, solana, ethereum, base, arbitrum, bitcoin, bsc, polygon, optimism, avalanche, hood]
       description: >-
         A chain funds can be withdrawn to: `near` directly, the rest through the
         1Click bridge. Narrower than `Chain` — `hyperevm` is signable but not
@@ -5308,7 +5309,11 @@ components:
               description: |-
                 Source chain. Supported: `near`, `ethereum`, `base`,
                 `arbitrum`, `solana`, `bitcoin`, `bsc`, `polygon`,
-                `optimism`, `avalanche`.
+                `optimism`, `avalanche`, `hood`. `token` defaults to `USDC`,
+                which not every chain carries — `hood` (Robinhood Chain) does
+                not, so name a token it has. `GET /wallet/v1/tokens` lists
+                them, and naming one the chain lacks answers
+                `unsupported_token` with what it does carry.
               example: ethereum
             token:
               type: string
@@ -5341,7 +5346,7 @@ components:
             - `near` — 64-char hex (NEAR implicit account), e.g.
               `f51768dc0c4d4bbb78890262da9882dee2ee5b6c2fcf2c527e56c6eadcb54353`
             - `ethereum` / `base` / `arbitrum` / `bsc` / `polygon` /
-              `optimism` / `avalanche` — `0x` + 40 hex (EVM), e.g.
+              `optimism` / `avalanche` / `hood` — `0x` + 40 hex (EVM), e.g.
               `0x582290c0b2Cb60989B35FFF66049f3e3247355bc`
             - `solana` — base58, 32-44 chars (Solana), e.g.
               `5AmGa2Bcfajbytg55UUb4vCAAzKBMYKZNQwx5S2BH2qf`

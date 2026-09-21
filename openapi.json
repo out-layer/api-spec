@@ -5263,10 +5263,11 @@
           "bsc",
           "avalanche",
           "hyperevm",
+          "hood",
           "solana",
           "bitcoin"
         ],
-        "description": "Supported chain identifier. The EVM chains (ethereum, polygon, base, arbitrum, optimism, bsc, avalanche, hyperevm) all share ONE derived address (a single secp256k1 key) and are signable via `/wallet/v1/evm/*`; `hyperevm` (Hyperliquid's EVM, chain id 999) is signable but not a deposit or withdraw chain. `solana` has its own derived ed25519 address and is signable via `/wallet/v1/solana/*`. `bitcoin` can be derived in the keystore but is not yet serviced by wallet v1. An endpoint that serves fewer chains than this list (balance, transfer and delete are NEAR-only; withdraw takes `WithdrawChain`) answers 400 for the ones it does not."
+        "description": "Supported chain identifier. The EVM chains (ethereum, polygon, base, arbitrum, optimism, bsc, avalanche, hyperevm, hood) all share ONE derived address (a single secp256k1 key) and are signable via `/wallet/v1/evm/*`; `hyperevm` (Hyperliquid's EVM, chain id 999) is signable but not a deposit or withdraw chain. `hood` is Robinhood Chain, an Arbitrum L2 that bridges both ways through 1Click. `solana` has its own derived ed25519 address and is signable via `/wallet/v1/solana/*`. `bitcoin` can be derived in the keystore but is not yet serviced by wallet v1. An endpoint that serves fewer chains than this list (balance, transfer and delete are NEAR-only; withdraw takes `WithdrawChain`) answers 400 for the ones it does not."
       },
       "SubPath": {
         "type": "string",
@@ -5293,7 +5294,8 @@
           "bsc",
           "polygon",
           "optimism",
-          "avalanche"
+          "avalanche",
+          "hood"
         ],
         "description": "A chain funds can be withdrawn to: `near` directly, the rest through the 1Click bridge. Narrower than `Chain` — `hyperevm` is signable but not bridged."
       },
@@ -6581,7 +6583,7 @@
             "properties": {
               "chain": {
                 "type": "string",
-                "description": "Source chain. Supported: `near`, `ethereum`, `base`,\n`arbitrum`, `solana`, `bitcoin`, `bsc`, `polygon`,\n`optimism`, `avalanche`.",
+                "description": "Source chain. Supported: `near`, `ethereum`, `base`,\n`arbitrum`, `solana`, `bitcoin`, `bsc`, `polygon`,\n`optimism`, `avalanche`, `hood`. `token` defaults to `USDC`,\nwhich not every chain carries — `hood` (Robinhood Chain) does\nnot, so name a token it has. `GET /wallet/v1/tokens` lists\nthem, and naming one the chain lacks answers\n`unsupported_token` with what it does carry.",
                 "example": "ethereum"
               },
               "token": {
@@ -6617,7 +6619,7 @@
           },
           "deposit_address": {
             "type": "string",
-            "description": "One-time address on the source chain — send funds here. The\naddress format depends on the resolved source chain:\n\n- `near` — 64-char hex (NEAR implicit account), e.g.\n  `f51768dc0c4d4bbb78890262da9882dee2ee5b6c2fcf2c527e56c6eadcb54353`\n- `ethereum` / `base` / `arbitrum` / `bsc` / `polygon` /\n  `optimism` / `avalanche` — `0x` + 40 hex (EVM), e.g.\n  `0x582290c0b2Cb60989B35FFF66049f3e3247355bc`\n- `solana` — base58, 32-44 chars (Solana), e.g.\n  `5AmGa2Bcfajbytg55UUb4vCAAzKBMYKZNQwx5S2BH2qf`\n- `bitcoin` — `bc1…` (segwit) or `1…` / `3…` (legacy)\n\nSending tokens to an address whose format doesn't match the\nsource chain will lose the funds — always verify the format\nclient-side before initiating the transfer."
+            "description": "One-time address on the source chain — send funds here. The\naddress format depends on the resolved source chain:\n\n- `near` — 64-char hex (NEAR implicit account), e.g.\n  `f51768dc0c4d4bbb78890262da9882dee2ee5b6c2fcf2c527e56c6eadcb54353`\n- `ethereum` / `base` / `arbitrum` / `bsc` / `polygon` /\n  `optimism` / `avalanche` / `hood` — `0x` + 40 hex (EVM), e.g.\n  `0x582290c0b2Cb60989B35FFF66049f3e3247355bc`\n- `solana` — base58, 32-44 chars (Solana), e.g.\n  `5AmGa2Bcfajbytg55UUb4vCAAzKBMYKZNQwx5S2BH2qf`\n- `bitcoin` — `bc1…` (segwit) or `1…` / `3…` (legacy)\n\nSending tokens to an address whose format doesn't match the\nsource chain will lose the funds — always verify the format\nclient-side before initiating the transfer."
           },
           "amount": {
             "type": "string"

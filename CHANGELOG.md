@@ -6,6 +6,16 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Fixed
 
+- **A token a chain does not carry is the caller's error, not ours.**
+  `/wallet/v1/deposit-intent`, its confidential twin, and the cross-chain
+  `withdraw` pre-flight answered `500` ("1Click API may be unavailable") when
+  `(chain, token)` named a token that chain has no 1Click asset for — the
+  commonest way to hit it being the `USDC` default on a chain without USDC.
+  They now answer `400 unsupported_token` naming what that chain does carry
+  (the code was already in `ErrorCode`; nothing emitted it), and reserve `503`
+  + `Retry-After` for the case where the token catalog itself could not be
+  read. `POST /wallet/v1/withdraw/dry-run` keeps reporting it as
+  `would_succeed: false, reason: bridge_rejected` rather than a 4xx.
 - **Agent Connect** — `POST /wallet/v1/binding/events` checks the shared secret
   before reading the body. An unauthenticated caller is answered `401`
   whatever it sends, where a malformed body used to be answered `422` — the
@@ -14,6 +24,11 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Added
 
+- **Robinhood Chain (`hood`)** on `Chain` and `WithdrawChain`: an Arbitrum L2,
+  EVM like the rest — it shares the wallet's one derived `0x` address — and
+  bridged both ways through 1Click, whose identifier for it is `hood`. It does
+  not carry USDC, the `token` default of `/wallet/v1/deposit-intent`, so a
+  deposit intent by `(chain, token)` must name one of its tokens.
 - **Agent Connect** — `status_reason` on `BindingResponse`: why a binding is
   not `active`, as the fault class of the last observation. Absent while
   active.
