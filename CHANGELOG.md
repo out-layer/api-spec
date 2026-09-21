@@ -6,6 +6,11 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Fixed
 
+- **`Idempotency-Key` described as it behaves.** The parameter said a repeated
+  key "returns the original result". It never did: the server answers `200`
+  with `duplicate_idempotency_key` and the original `request_id` in `message` —
+  a pointer, read through `GET /wallet/v1/requests/{request_id}`. Documentation
+  only; the behaviour is unchanged since the first wallet release.
 - **A token a chain does not carry is the caller's error, not ours.**
   `/wallet/v1/deposit-intent`, its confidential twin, and the cross-chain
   `withdraw` pre-flight answered `500` ("1Click API may be unavailable") when
@@ -24,6 +29,23 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Added
 
+- **Limit orders** — `POST/GET /wallet/v1/limit-orders`,
+  `GET /wallet/v1/limit-orders/{order_id}`, `POST …/{order_id}/cancel`,
+  `POST /wallet/v1/limit-orders/cancel-all`. A swap rested on 1Click at the
+  owner's price, funded from the wallet's intents balance. The wallet
+  authorises it once and the payout happens later with no further signature,
+  so it is gated as the exit it can become: a default-DENY `limit_order`
+  capability and transaction type of its own, the address rules on `recipient`, and
+  the per-token amount limit — `swap` and `cross_chain_withdraw` neither imply
+  it nor stand in for it. The endpoints are a thin door onto 1Click's
+  `/v0/orders`: the request carries its parameters (`recipient`,
+  `recipient_type`, …) and the answer is its order — field names in snake_case,
+  enumerated values in lower case, nothing renamed; `is_payout_status_final` is
+  the only terminal signal. Multisig wallets answer `pending_approval` and
+  approvers sign over the order's terms. Freezing a wallet stops new orders but
+  does not cancel resting ones; cancelling is never frozen (`cancel-all`), and
+  is asynchronous, so a last slice may still fill.
+  `limit_order` joins `RequestType` and `in_flight_operation`.
 - **Robinhood Chain (`hood`)** on `Chain` and `WithdrawChain`: an Arbitrum L2,
   EVM like the rest — it shares the wallet's one derived `0x` address — and
   bridged both ways through 1Click, whose identifier for it is `hood`. It does
