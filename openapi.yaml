@@ -55,8 +55,8 @@ tags:
       being curated adds is a price per `operation` on chain and the right to
       read a secret its owner stored for it. A caller who pays is never limited
       by a count of calls — money bounds a funded key, an allowance bounds a
-      subscriber — and the one count there is belongs to the trial: ten calls, in
-      a wallet's first week (`POST /trial-key`).
+      subscriber — and the one count there is belongs to the trial: fifty calls, in
+      a wallet's first week (`POST /trial-key`; the answer's `calls` is the number).
 
 
       Which ones exist here, and the skill describing each, come from
@@ -3580,9 +3580,9 @@ paths:
     post:
       tags: [Subscriptions]
       operationId: claimTrialKey
-      summary: Claim this wallet's trial — ten connector calls in its first week
+      summary: Claim this wallet's trial — fifty connector calls in its first week
       description: |
-        **A trial is ten connector calls, within seven days of the wallet's
+        **A trial is fifty connector calls, within seven days of the wallet's
         creation.** That is all of it. The answer is a payment key, sent as
         `X-Payment-Key` like any other, plus how many calls it makes and when it
         stops working.
