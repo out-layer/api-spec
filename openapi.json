@@ -4101,7 +4101,7 @@
         ],
         "operationId": "purchaseAllowance",
         "summary": "Turn balance already on a key into allowance",
-        "description": "Buys a plan out of the key's own balance. The same plan can be bought\non chain for any key, with an `ft_transfer_call` carrying\n`{\"action\":\"buy_subscription\",\"nonce\":N,\"owner\":\"<key owner>\",\"plan\":0}`.\n\nOnly the plan's PRICE is spent; an overpayment stays on the key as\nbalance. The allowance ADDS to whatever is there and validity extends\nfrom `max(now, expires_at)`, so buying again never shortens what is\nalready paid for.\n\nA `wk_` is deliberately NOT accepted here: it runs a wallet and does not\nspend a payment key's balance.\n",
+        "description": "Buys a plan out of the key's own balance. The same plan can be bought\non chain for any payment key, with an `ft_transfer_call` carrying\n`{\"action\":\"buy_subscription\",\"nonce\":N,\"owner\":\"<key owner>\",\"plan\":0}`.\n\nNever on the wallet's trial key (nonce 0): the contract keeps no record\nthere, and its subscription is OutLayer's to give. That key is answered\n`400` with `reason: trial_key_not_purchasable`; buy on a payment key\nthe wallet creates (nonce ≥ 1).\n\nOnly the plan's PRICE is spent; an overpayment stays on the key as\nbalance. The allowance ADDS to whatever is there and validity extends\nfrom `max(now, expires_at)`, so buying again never shortens what is\nalready paid for.\n\nA `wk_` is deliberately NOT accepted here: it runs a wallet and does not\nspend a payment key's balance.\n",
         "security": [
           {
             "PaymentKeyAuth": []
@@ -4163,7 +4163,14 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "`reason: invalid_request` — `amount_usd` is not a positive integer,\nor buys no plan on sale (the message names the cheapest); or\n`reason: trial_key_not_purchasable` — the key presented is the\nwallet's trial key (nonce 0). **`terminal: true`**.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallRefusal"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -5342,6 +5349,8 @@
               "call_already_in_flight",
               "trial_exhausted",
               "trial_expired",
+              "trial_key_not_purchasable",
+              "invalid_request",
               "unknown_operation",
               "vault_not_verified",
               "vault_unlocked",
@@ -5447,7 +5456,8 @@
             "type": "integer"
           },
           "has_subscription": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "A subscription on this key: an allowance with an end, bought or\ngiven by the operator. Never true for a trial key; a trial the\noperator converted to a subscription reports `true`, with its\n`expires_at`.\n"
           },
           "wallet_account": {
             "type": "string",
@@ -5665,7 +5675,7 @@
           "hood",
           "hypercore"
         ],
-        "description": "A chain funds can be withdrawn to: `near` directly, the rest through the 1Click bridge. Neither a subset nor a superset of `Chain` — `hyperevm` is signable but not bridged, and `hypercore` (Hyperliquid's L1, whose accounts are EVM addresses) is bridged but not signable: `to` is a HyperCore account, and USDC lands on its spot balance."
+        "description": "A chain funds can be withdrawn to: `near` directly, the rest through the 1Click bridge. Neither a subset nor a superset of `Chain` — `hyperevm` is signable but not bridged, and `hypercore` (Hyperliquid's L1, whose accounts are EVM addresses) is bridged but not signable: `to` is a HyperCore account, and 1Click credits the USDC to its perps balance."
       },
       "RequestType": {
         "type": "string",
