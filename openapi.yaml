@@ -3703,6 +3703,64 @@ paths:
                         project_id: { type: string }
                         description: { type: string }
                         skill: { type: string }
+  /public/connectors/{id}/describe:
+    get:
+      tags: [Connectors]
+      operationId: publicConnectorDescribe
+      summary: What a connector does and takes, from the wasm that is deployed
+      description: |
+        The `describe` block of the `outlayer.manifest` section in the
+        connector's ACTIVE version — the bytes the workers run, covered by the
+        hash the contract records. The operations come back as a list in the
+        manifest's order, each with its class, one sentence, and the parameters
+        it reads. No prices: those are on chain and in the connector's `status`.
+
+        This is what `app.outlayer.ai/connectors/{id}` renders. The connector's
+        build holds the block to its code, so a description that fell behind
+        the code could not have been published.
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+          example: gmail
+      responses:
+        '200':
+          description: The connector, described by its own manifest.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  connector_id: { type: string }
+                  project_id: { type: string }
+                  network: { type: string, enum: [mainnet, testnet] }
+                  version: { type: string, description: The active version's wasm hash. }
+                  display: { type: object }
+                  summary: { type: string }
+                  operations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        class: { type: string, enum: [read, write] }
+                        doc: { type: string }
+                        params:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              name: { type: string }
+                              type: { type: string, description: "Prose for a developer, not a schema language." }
+                              required: { type: boolean }
+                              doc: { type: string }
+                  limits: { type: array, items: { type: object } }
+        '404':
+          description: No such connector on this network, not published, or a version without a `describe` block.
+        '503':
+          description: The contract could not be read.
   /payment-keys/balance:
     get:
       tags: [Subscriptions]
