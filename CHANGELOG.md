@@ -6,6 +6,23 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Fixed
 
+- **A confidential quote without an estimate is an answer, not an error.** A
+  confidential `swap-quote` or `withdraw/dry-run` whose 1Click quote carries no
+  `amountOut` answers `200` without `amount_out` / `min_amount_out` and with a
+  `hint` saying 1Click gave no estimate for the route. Asking again quotes the
+  same way.
+- **Polling an unknown call is a 404.** `GET /calls/{call_id}` answered `500
+  internal_error` for an id no call has. It now answers `404` with `reason`
+  `call_not_found`.
+- **A database failure answers a fixed sentence, never the database's text.**
+  `/call`, `/calls/{call_id}`, `/payment-keys/balance`, `/subscription/*` and
+  `/wallet/v1/*` put Postgres's own message — table, constraint, value — into
+  `error` / `message` when a query failed. They now answer `503` + `Retry-After`
+  when the database could not serve the request right now (pool exhausted,
+  connection lost, server shutting down, serialization failure, deadlock), as
+  `upstream_unavailable`, and `500 internal_error` otherwise, each with a fixed
+  sentence. `/public/*` reads answer the same split with their own 503
+  sentences.
 - **`Idempotency-Key` described as it behaves.** The parameter said a repeated
   key "returns the original result". It never did: the server answers `200`
   with `duplicate_idempotency_key` and the original `request_id` in `message` —
@@ -28,6 +45,10 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
   body cannot be read gets `400`.
 
 ### Added
+
+- **`upstream_unavailable` on `/wallet/v1/*`** — added to `ErrorCode`: `503` +
+  `Retry-After`, this deployment's database could not serve the request right
+  now. The name `/call` already answers the condition with.
 
 - **Limit orders** — `POST/GET /wallet/v1/limit-orders`,
   `GET /wallet/v1/limit-orders/{order_id}`, `POST …/{order_id}/cancel`,
@@ -80,6 +101,19 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Changed
 
+- **Cross-chain deposit refunds follow the wallet policy.** The refund address
+  is the policy's `refund_addresses.<chain>` entry; without one, the wallet's
+  derived address on the chain where it has one (NEAR, Solana, EVM chains,
+  HyperCore — the request's `refund_address` is ignored and `hint` says so),
+  else the request's `refund_address`. Without a policy, the request's
+  `refund_address`, else the derived address. A chain the wallet has no
+  address on, with neither, answers `400`. Same rule on the confidential
+  deposit's HyperCore refunds.
+- **A synchronous `/call` whose job is already queued never answers `503`.** A
+  database failure while it waits answers `500 internal_error` without
+  `Retry-After`: the job may still run and be charged, and a resend would run a
+  second call. `503 upstream_unavailable` stays for failures before the job is
+  queued.
 - **A synchronous call that outruns its window now answers `408`**, carrying
   `call_id`, `reason: "timeout"` and a `poll_url`, instead of `500`. The outcome
   is settled, not a fault of ours — and a `500` invites the one wrong move,

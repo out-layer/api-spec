@@ -2079,7 +2079,7 @@
         ],
         "operationId": "confidentialDepositCrossChain",
         "summary": "Cross-chain deposit into the confidential shard (quote only)",
-        "description": "Requests a one-time deposit address to fund the confidential balance\nfrom an external chain (`ORIGIN_CHAIN` → `CONFIDENTIAL_INTENTS`) via\n1Click / NEAR Intents. The caller sends `amount` of the source asset to\nthe returned `deposit_address` out-of-band; the solver delivers it and\ncredits the confidential balance. **The wallet's NEAR address never\ntouches the public side** — this is the most private way to fund a\nconfidential balance. Poll `GET /wallet/v1/requests/{id}` for status.\n\n**Refunds.** A failed bridge refunds into the confidential balance,\nexcept from `hypercore`, whose assets refund only on their origin\nchain. There the address is resolved as on the public route: the\nwallet policy's `refund_addresses.hypercore`; a policy without one →\nthe wallet's derived HyperCore address, and the request's\n`refund_address` is ignored (the `hint` says so); no policy → the\nrequest's `refund_address` (format-checked), else the derived address.\n\n**Legacy alias:** `POST /wallet/v1/confidential/deposit-intent` still\nworks and resolves to the same handler.\n",
+        "description": "Requests a one-time deposit address to fund the confidential balance\nfrom an external chain (`ORIGIN_CHAIN` → `CONFIDENTIAL_INTENTS`) via\n1Click / NEAR Intents. The caller sends `amount` of the source asset to\nthe returned `deposit_address` out-of-band; the solver delivers it and\ncredits the confidential balance. **The wallet's NEAR address never\ntouches the public side** — this is the most private way to fund a\nconfidential balance. Poll `GET /wallet/v1/requests/{id}` for status.\n\n**Refunds.** A failed bridge refunds into the confidential balance,\nexcept from `hypercore`, whose assets refund only on their origin\nchain. There the address is resolved as on the public route\n([`DepositIntentRequest`](#/components/schemas/DepositIntentRequest)):\nthe wallet policy's `refund_addresses.hypercore`; a policy without one\n→ the wallet's derived HyperCore address, and the request's\n`refund_address` is ignored (the `hint` says so); no policy → the\nrequest's `refund_address` (format-checked), else the derived address.\n\n**Legacy alias:** `POST /wallet/v1/confidential/deposit-intent` still\nworks and resolves to the same handler.\n",
         "requestBody": {
           "required": true,
           "content": {
@@ -2234,7 +2234,7 @@
         ],
         "operationId": "intentsDepositCrossChain",
         "summary": "Create a cross-chain deposit (via 1Click / NEAR Intents)",
-        "description": "Requests a one-time deposit address on a source chain via NEAR Intents\n1Click. The caller sends `amount` of the source token to the returned\n`deposit_address`; the solver delivers it and credits the wallet's\nintents.near balance. Poll `getCrossChainDepositStatus` until `success`.\n\nThis is a **cross-chain deposit via 1Click / NEAR Intents** — the\nwallet's NEAR address receives the intents.near credit once the solver\nsettles the source-chain deposit.\n\nTwo request shapes are accepted (see\n[`DepositIntentRequest`](#/components/schemas/DepositIntentRequest)):\n\n- **By asset id (preferred)** — `{ source_asset, destination_asset?,\n  amount }`. The source chain is derived from the\n  [`defuse_asset_id`](#/components/schemas/TokenInfo) prefix. This is\n  the shape returned by `listTokens` and used by the dashboard.\n- **By chain + symbol (legacy)** — `{ chain, token?, amount }`. The\n  coordinator resolves `(chain, symbol)` to an asset id via the\n  1Click token catalog.\n\nIf both shapes are present and disagree, `source_asset` wins and the\ncoordinator logs a warning. `near` is a valid source chain — a\nNEAR-origin deposit returns a 64-char hex implicit account.\n\nAmounts are in the token's smallest unit. There's a small solver fee,\nso `amount_out` < `amount`.\n\n**Refunds.** If the bridge fails, funds return on the source chain.\nWhere is the owner's decision: the wallet policy's `refund_addresses`\nentry for that chain; a policy without one → the wallet's derived\naddress on the chain, and the request's `refund_address` is ignored\n(the `hint` says so); no policy → the request's `refund_address`\n(format-checked for the chain), else the derived address.\n\nThe returned `deposit_address` is chain-specific — see the\n[`DepositIntentResponse.deposit_address`](#/components/schemas/DepositIntentResponse)\ndescription for per-chain address formats.\n\n**Legacy alias:** `POST /wallet/v1/deposit-intent` still works and\nresolves to the same handler.\n",
+        "description": "Requests a one-time deposit address on a source chain via NEAR Intents\n1Click. The caller sends `amount` of the source token to the returned\n`deposit_address`; the solver delivers it and credits the wallet's\nintents.near balance. Poll `getCrossChainDepositStatus` until `success`.\n\nThis is a **cross-chain deposit via 1Click / NEAR Intents** — the\nwallet's NEAR address receives the intents.near credit once the solver\nsettles the source-chain deposit.\n\nTwo request shapes are accepted (see\n[`DepositIntentRequest`](#/components/schemas/DepositIntentRequest)):\n\n- **By asset id (preferred)** — `{ source_asset, destination_asset?,\n  amount }`. The source chain is derived from the\n  [`defuse_asset_id`](#/components/schemas/TokenInfo) prefix. This is\n  the shape returned by `listTokens` and used by the dashboard.\n- **By chain + symbol (legacy)** — `{ chain, token?, amount }`. The\n  coordinator resolves `(chain, symbol)` to an asset id via the\n  1Click token catalog.\n\nIf both shapes are present and disagree, `source_asset` wins and the\ncoordinator logs a warning. `near` is a valid source chain — a\nNEAR-origin deposit returns a 64-char hex implicit account.\n\nAmounts are in the token's smallest unit. There's a small solver fee,\nso `amount_out` < `amount`.\n\n**Refunds.** If the bridge fails, funds return on the source chain.\nWhere is the owner's decision: the wallet policy's `refund_addresses`\nentry for that chain; a policy without one → the wallet's derived\naddress on the chain when it has one (NEAR, Solana, EVM chains,\nHyperCore), and the request's `refund_address` is ignored (the `hint`\nsays so); else → the request's `refund_address`. No policy → the\nrequest's `refund_address`, else the derived address. A request\naddress is format-checked for the chain. A deposit from a chain the\nwallet has no address on (Bitcoin, Zcash, Tron, …) with neither a\npolicy entry nor a `refund_address` is refused with `400`.\n\nThe returned `deposit_address` is chain-specific — see the\n[`DepositIntentResponse.deposit_address`](#/components/schemas/DepositIntentResponse)\ndescription for per-chain address formats.\n\n**Legacy alias:** `POST /wallet/v1/deposit-intent` still works and\nresolves to the same handler.\n",
         "requestBody": {
           "required": true,
           "content": {
@@ -3926,8 +3926,18 @@
               }
             }
           },
+          "500": {
+            "description": "`internal_error` — a failure on our side, with a fixed sentence and\nno `Retry-After`. A synchronous call whose job was already queued\nanswers this, never `503`, when the database fails while it waits:\nthe job may still run and be charged, and `/call` takes no\nidempotency key, so a resend would run — and bill — a second call.\nDo not resend it blindly.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallRefusal"
+                }
+              }
+            }
+          },
           "503": {
-            "description": "`upstream_unavailable` — something this call depends on has not\ncaught up yet, and the same call works later. `keystore_error` —\nthe TEE keystore was unreachable or refused to sign. Both are\ntransient and both are sent with a `Retry-After` interval.\n\nDeliberately not `service_unavailable`: on `/wallet/v1/*` that code\nmeans a feature this deployment does not offer and carries no\ninterval, and one product must not use one code for \"come back\" and\n\"never come back\".\n",
+            "description": "`upstream_unavailable` — something this call depends on has not\ncaught up yet, or this deployment's database could not serve the\nrequest right now, and the same call works later. `keystore_error` —\nthe TEE keystore was unreachable or refused to sign. Both are\ntransient and both are sent with a `Retry-After` interval. Sent\nonly before the job is queued: nothing ran and nothing was charged,\nso resending is safe.\n\nDeliberately not `service_unavailable`: on `/wallet/v1/*` that code\nmeans a feature this deployment does not offer and carries no\ninterval, and one product must not use one code for \"come back\" and\n\"never come back\".\n",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before retrying.",
@@ -3986,6 +3996,16 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "No call has this id; `reason` is `call_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallRefusal"
+                }
+              }
+            }
           }
         }
       }
@@ -5104,10 +5124,10 @@
         }
       },
       "ServiceUnavailable": {
-        "description": "Unavailable — either permanently on this deployment or transiently, and the code says which. `service_unavailable`: feature not enabled/configured (e.g. the `/wallet/v1/confidential/*` routes when `ENABLE_CONFIDENTIAL_INTENTS` is off, the binding-event endpoints without a webhook secret, or NEAR Intents on a network with no solvers) — do not retry; no interval is sent because none would be true. `chain_unavailable`: the chain, or a node in front of it, could not answer this second — a balance that could not be read, a code hash that could not be fetched, a binding that could not be verified, a transaction that expired against a block the node has forgotten. Nothing happened and nothing was charged — transient, retry after the `Retry-After` header. `keystore_error`: the TEE keystore (signing / key derivation) was unreachable or rejected the request — transient, retry after `Retry-After`. `confidential_jwt_expired`: the confidential per-account JWT was rejected by the 1Click upstream and re-authentication also failed — transient, retry after `Retry-After`. (Transient upstream failures use 503 rather than 502 because Cloudflare replaces origin 502/504 responses with its own HTML error page, hiding the JSON body from clients.)",
+        "description": "Unavailable — either permanently on this deployment or transiently, and the code says which. `service_unavailable`: feature not enabled/configured (e.g. the `/wallet/v1/confidential/*` routes when `ENABLE_CONFIDENTIAL_INTENTS` is off, the binding-event endpoints without a webhook secret, or NEAR Intents on a network with no solvers) — do not retry; no interval is sent because none would be true. `chain_unavailable`: the chain, or a node in front of it, could not answer this second — a balance that could not be read, a code hash that could not be fetched, a binding that could not be verified, a transaction that expired against a block the node has forgotten. Nothing happened and nothing was charged — transient, retry after the `Retry-After` header. `keystore_error`: the TEE keystore (signing / key derivation) was unreachable or rejected the request — transient, retry after `Retry-After`. `upstream_unavailable`: this deployment's database could not serve the request right now — transient, retry after `Retry-After`; the same code `/call` answers the condition with. `confidential_jwt_expired`: the confidential per-account JWT was rejected by the 1Click upstream and re-authentication also failed — transient, retry after `Retry-After`. (Transient upstream failures use 503 rather than 502 because Cloudflare replaces origin 502/504 responses with its own HTML error page, hiding the JSON body from clients.)",
         "headers": {
           "Retry-After": {
-            "description": "Present on transient failures (`chain_unavailable`, `keystore_error`, `confidential_jwt_expired`) — seconds to wait before retrying. Absent on `service_unavailable`, which is not transient: there is no interval after which an unset environment variable becomes set.",
+            "description": "Present on transient failures (`chain_unavailable`, `keystore_error`, `upstream_unavailable`, `confidential_jwt_expired`) — seconds to wait before retrying. Absent on `service_unavailable`, which is not transient: there is no interval after which an unset environment variable becomes set.",
             "schema": {
               "type": "integer"
             }
@@ -5325,6 +5345,7 @@
             "enum": [
               "allowance_no_deposit",
               "bad_key_format",
+              "call_not_found",
               "compute_limit_too_low",
               "expires_too_soon",
               "insufficient_allowance",
@@ -5741,6 +5762,7 @@
           "keystore_error",
           "service_unavailable",
           "chain_unavailable",
+          "upstream_unavailable",
           "chain_refused",
           "tx_rejected_by_node",
           "confidential_jwt_expired",
@@ -6891,10 +6913,12 @@
         "type": "object",
         "properties": {
           "amount_out": {
-            "type": "string"
+            "type": "string",
+            "description": "Expected output in minimal units. Absent on a confidential\nswap-quote or withdraw dry-run when 1Click gave no estimate for the\nroute; `hint` then says so. Such an answer is final for the route:\nasking again quotes the same way."
           },
           "min_amount_out": {
-            "type": "string"
+            "type": "string",
+            "description": "Minimum guaranteed output (after slippage). Absent together with `amount_out`."
           },
           "deadline": {
             "type": "string",
@@ -6902,6 +6926,10 @@
           },
           "time_estimate_seconds": {
             "type": "integer"
+          },
+          "hint": {
+            "type": "string",
+            "description": "Present only when `amount_out` is absent, and says why."
           }
         }
       },
@@ -6952,10 +6980,10 @@
       },
       "DepositRefundAddress": {
         "type": "string",
-        "description": "Address on the source chain a failed cross-chain deposit refunds to.\nConsulted only on a wallet WITHOUT a policy, and format-checked for\nthe chain (`0x` + 40 hex on EVM chains and HyperCore, base58 on\nSolana, an account id on NEAR). Under a policy the owner decides —\nthe policy's `refund_addresses` entry for the chain, else the\nwallet's derived address on it — and this field is ignored; the\nresponse `hint` then says so and names the address a refund goes to."
+        "description": "Address on the source chain a failed cross-chain deposit refunds to,\nformat-checked for the chain (`0x` + 40 hex on EVM chains and\nHyperCore, base58 on Solana, an account id on NEAR, `bc1` / `1` / `3`\non Bitcoin). Used on a wallet without a policy, and on a wallet whose\npolicy names no `refund_addresses` entry for a chain the wallet has\nno address of its own on (Bitcoin, Zcash, Tron, …) — there it is\nrequired. Otherwise the owner decides — the policy's\n`refund_addresses` entry for the chain, else the wallet's derived\naddress on it — and this field is ignored; the response `hint` then\nsays so and names the address a refund goes to."
       },
       "DepositIntentRequest": {
-        "description": "Request body for `intentsDepositCrossChain`. Two shapes accepted; see\nthe `anyOf` branches below. `amount` is always required. The\n`destination_asset` field defaults to NEAR USDC\n(`nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1`)\nwhen omitted — see\n[`DestinationAsset`](#/components/schemas/DestinationAsset).\n\nWhere a failed deposit refunds is resolved in this order: the wallet\npolicy's `refund_addresses` entry for the source chain; a policy\nwithout one → the wallet's derived address on that chain (the\nrequest's `refund_address` is ignored); no policy → the request's\n`refund_address`, else the derived address. See\n[`DepositRefundAddress`](#/components/schemas/DepositRefundAddress).\n\nUses `anyOf` (not `oneOf`) deliberately — a request that supplies\nboth `source_asset` and `chain` matches both branches; the\ncoordinator resolves the conflict by preferring `source_asset` and\nlogging a warning, so `oneOf`'s strict \"exactly one match\" rule\nwould needlessly reject valid requests.",
+        "description": "Request body for `intentsDepositCrossChain`. Two shapes accepted; see\nthe `anyOf` branches below. `amount` is always required. The\n`destination_asset` field defaults to NEAR USDC\n(`nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1`)\nwhen omitted — see\n[`DestinationAsset`](#/components/schemas/DestinationAsset).\n\nWhere a failed deposit refunds is resolved in this order: the wallet\npolicy's `refund_addresses` entry for the source chain; a policy\nwithout one → the wallet's derived address on that chain when it has\none — NEAR, Solana, EVM chains, HyperCore (the request's\n`refund_address` is ignored) — else the request's `refund_address`;\nno policy → the request's `refund_address`, else the derived address.\nNo address at all is a `400`. See\n[`DepositRefundAddress`](#/components/schemas/DepositRefundAddress).\n\nUses `anyOf` (not `oneOf`) deliberately — a request that supplies\nboth `source_asset` and `chain` matches both branches; the\ncoordinator resolves the conflict by preferring `source_asset` and\nlogging a warning, so `oneOf`'s strict \"exactly one match\" rule\nwould needlessly reject valid requests.",
         "anyOf": [
           {
             "title": "BySourceAsset",
@@ -8453,7 +8481,7 @@
       },
       "RefundAddresses": {
         "type": "object",
-        "description": "Where a failed cross-chain deposit refunds, per source chain: the\nchain name as the deposit endpoints accept it (`hypercore`, `base`,\n`solana`, …; stored canonical) → an address on that chain. Each\naddress is format-checked for its chain when the policy is encrypted,\nand a chain the deposit endpoints do not accept is refused. A chain\nwithout an entry refunds to the wallet's own derived address on it.\nWhenever a policy exists, the deposit request's `refund_address` is\nignored — the owner decides where a refund lands, not the caller.",
+        "description": "Where a failed cross-chain deposit refunds, per source chain: the\nchain name as the deposit endpoints accept it (`hypercore`, `base`,\n`solana`, …; stored canonical) → an address on that chain. Each\naddress is format-checked for its chain when the policy is encrypted,\nand a chain the deposit endpoints do not accept is refused. A chain\nwithout an entry refunds to the wallet's own derived address on it\n(NEAR, Solana, EVM chains, HyperCore), and the deposit request's\n`refund_address` is ignored — the owner decides where a refund lands,\nnot the caller. On a chain the wallet has no address of its own on\n(Bitcoin, Zcash, Tron, …) and no entry names, the request's\n`refund_address` is used, and a deposit without one is refused.",
         "additionalProperties": {
           "type": "string"
         },
@@ -8978,7 +9006,7 @@
         ]
       },
       "ConfidentialDepositIntentRequest": {
-        "description": "Cross-chain deposit body — the same two shapes as\n`DepositIntentRequest` (`source_asset` or `chain`+`token`), with the\nconfidential route's own `destination_asset` rule: what lands in the\nconfidential balance is `destination_asset` when given; otherwise USDC\nfrom any chain lands as NEAR USDC (as on the public route), and any\nother token lands as the SAME asset, bridged — see\n[`ConfidentialDestinationAsset`](#/components/schemas/ConfidentialDestinationAsset).\n\nA failed bridge refunds into the confidential balance (the wallet's\n64-hex intentsUserId), except from `hypercore`, whose assets refund\nonly on their origin chain. There the refund address follows the same\nrule as the public route — the wallet policy's `refund_addresses`\nentry for `hypercore`; a policy without one → the wallet's derived\nHyperCore address (the request's `refund_address` is ignored); no\npolicy → `refund_address`, else the derived address.",
+        "description": "Cross-chain deposit body — the same two shapes as\n`DepositIntentRequest` (`source_asset` or `chain`+`token`), with the\nconfidential route's own `destination_asset` rule: what lands in the\nconfidential balance is `destination_asset` when given; otherwise USDC\nfrom any chain lands as NEAR USDC (as on the public route), and any\nother token lands as the SAME asset, bridged — see\n[`ConfidentialDestinationAsset`](#/components/schemas/ConfidentialDestinationAsset).\n\nA failed bridge refunds into the confidential balance (the wallet's\n64-hex intentsUserId), except from `hypercore`, whose assets refund\nonly on their origin chain. There the refund address follows the same\nrule as the public route — the wallet policy's `refund_addresses`\nentry for `hypercore`; a policy without one → the wallet's derived\nHyperCore address (the request's `refund_address` is ignored); no\npolicy → `refund_address`, else the derived address. HyperCore always\nhas a derived address, so the request's address is never required\nhere.",
         "anyOf": [
           {
             "title": "BySourceAsset",
