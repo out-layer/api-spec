@@ -4170,8 +4170,8 @@
           "Inbox"
         ],
         "operationId": "getInboxTaskOrigin",
-        "summary": "The run that made a task, and what it answered",
-        "description": "With the run's attestation — public, at\n`GET /attestations/by-call/{call_id}` or\n`GET /attestations/by-request/{request_id}` — this is what a page\nneeds to tell that a task was made by a published build of its\nproject. The attestation names the build that ran and the SHA-256 of\nthe run's answer; `output` is that answer, byte for byte; and the\nanswer names the task's id and `task_hash`. A request on chain\nanswered in its transaction, so `output` is `null` for it.\n",
+        "summary": "The run that made a task, what it was asked and what it answered",
+        "description": "With the run's attestation — public, at\n`GET /attestations/by-call/{call_id}` or\n`GET /attestations/by-request/{request_id}` — this is what a page\nneeds to tell that a task was made by a published build of its\nproject. The attestation names the build that ran and the SHA-256 of\nthe run's input and of its answer; `input` and `output` are those\nbytes, byte for byte; and the answer names the task's id and\n`task_hash`. A request on chain carries its input and its answer in\nits transaction, so both are `null` for it.\n",
         "security": [
           {
             "OwnerSession": []
@@ -4192,7 +4192,8 @@
                   "required": [
                     "run",
                     "door",
-                    "output"
+                    "output",
+                    "input"
                   ],
                   "properties": {
                     "run": {
@@ -4218,7 +4219,15 @@
                       "type": [
                         "string",
                         "null"
-                      ]
+                      ],
+                      "description": "What the run answered, as the bytes the attestation's\n`output_hash` is the SHA-256 of. Present for a call over\nHTTPS that completed; `null` for a request on chain.\n"
+                    },
+                    "input": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "What the run was asked, as the bytes the attestation's\n`input_hash` is the SHA-256 of: the call's `input` as the\ncoordinator serialised it, keys in the order the caller\nsent them. Present for a call over HTTPS; `null` for a\nrequest on chain, whose transaction carries it.\n"
                     }
                   }
                 }
@@ -5520,6 +5529,63 @@
                       "type": "array",
                       "items": {
                         "type": "object"
+                      }
+                    },
+                    "callers": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "description": "The manifest's `callers` block as written: which doors a\nrun may come through (`direct`, `contract`, `https`,\n`meta_tx`). `null` when the manifest declares none, which\nadmits every door. A door the block leaves out is\n`allow`, except `meta_tx`, which is `deny`.\n",
+                      "properties": {
+                        "direct": {
+                          "type": "string",
+                          "enum": [
+                            "allow",
+                            "deny"
+                          ]
+                        },
+                        "contract": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "allow",
+                                "deny"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "only"
+                              ],
+                              "properties": {
+                                "only": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "minItems": 1,
+                                  "maxItems": 32
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        "https": {
+                          "type": "string",
+                          "enum": [
+                            "allow",
+                            "deny"
+                          ]
+                        },
+                        "meta_tx": {
+                          "type": "string",
+                          "enum": [
+                            "allow",
+                            "deny"
+                          ]
+                        }
                       }
                     }
                   }
