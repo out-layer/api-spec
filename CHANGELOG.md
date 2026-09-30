@@ -4,6 +4,24 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+### Added
+
+- **Inbox: tasks between an agent and its owner.** `POST`/`DELETE /inbox/session`
+  (an owner's session opened by one NEP-413 statement signed by a full-access
+  key; five devices an account), `GET /inbox/tasks` (ciphertext for the
+  device, `more` when the list is cut), `/inbox/tasks/{id}` (delete),
+  `/reject`, `/files/{n}`, `/origin`, `/inbox/mutes`, `/inbox/devices`,
+  `/inbox/webhook` (a secret told once, events signed with it). Withdrawing
+  another device and naming or removing the webhook take an `OwnerConfirmation`:
+  one signature over a sentence naming the action and the minute. Refusals
+  `InboxRefusal` with `reason` among `session_required`, `session_replaced`,
+  `invalid_statement`, `task_not_found`, `task_closed`, `invalid_request`,
+  `confirmation_required`, `upstream_unavailable`, `internal_error`.
+- **`GET /wallet/v1/pending_approvals_by_pubkey` is told to the wallet's owner,
+  signed in** (`session_required`, `session_replaced`, `not_wallet_owner`). One
+  approval by its id (`GET /wallet/v1/approval/{id}`) needs no session, as
+  before.
+
 ### Fixed
 
 - **A confidential quote without an estimate is an answer, not an error.** A
