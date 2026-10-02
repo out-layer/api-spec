@@ -2565,7 +2565,7 @@
         },
         "responses": {
           "200": {
-            "description": "The order was created and funded, or is waiting for multisig approval.",
+            "description": "The order was created and funded, is waiting for multisig approval, or was created with its funding transfer handed over and unconfirmed (`processing`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2575,6 +2575,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/LimitOrderPendingApproval"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LimitOrderProcessing"
                     }
                   ]
                 }
@@ -2831,7 +2834,7 @@
         },
         "responses": {
           "200": {
-            "description": "Payment check created",
+            "description": "Payment check created: `status=unclaimed` once its funding settled, or `status=creating` with a `poll_url` while the funding transfer is unconfirmed. The `check_key` is returned either way — keep it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2862,7 +2865,7 @@
         ],
         "operationId": "batchCreatePaymentChecks",
         "summary": "Create up to 10 payment checks in one call",
-        "description": "Creates between 1 and 10 payment checks in a single request, each backed\nby its own ephemeral intents account. The wallet's intents balance must\ncover the sum per token across the batch.\n\n**Security model:** identical to `createPaymentCheck` — gated by the\ndefault-DENY `payment_check` capability and its per-transaction amount cap\n(NOT multisig); each check's claim/reclaim is signed by that check's\nephemeral key, not the keystore.\n",
+        "description": "Creates between 1 and 10 payment checks in a single request, each backed\nby its own ephemeral intents account. The wallet's intents balance must\ncover the sum per token across the batch; a batch it does not cover is\nrefused whole, before any check is funded. Each check answers as\n`createPaymentCheck` does (`unclaimed`, or `creating` + `poll_url`). If\nthe batch stops part way, the checks already created are listed with\ntheir keys and `error` says why the rest were not created.\n\n**Security model:** identical to `createPaymentCheck` — gated by the\ndefault-DENY `payment_check` capability and its per-transaction amount cap\n(NOT multisig); each check's claim/reclaim is signed by that check's\nephemeral key, not the keystore.\n",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -2893,7 +2896,7 @@
         },
         "responses": {
           "200": {
-            "description": "Payment checks created",
+            "description": "Payment checks created (see `error` for a batch that stopped early)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2924,7 +2927,12 @@
         ],
         "operationId": "claimPaymentCheck",
         "summary": "Claim a payment check",
-        "description": "Claims the funds held by a payment check into the authenticated wallet's\nintents balance. Signed by the ephemeral `check_key` (NEP-413), so the\ncaller need only hold the key. Omit `amount` for a full claim, or pass a\npartial amount (minimal units) to claim part and leave the remainder\nclaimable. Expired or already-settled checks are rejected.\n",
+        "description": "Claims the funds held by a payment check into the authenticated wallet's\nintents balance. Signed by the ephemeral `check_key` (NEP-413), so the\ncaller need only hold the key. Omit `amount` for a full claim, or pass a\npartial amount (minimal units) to claim part and leave the remainder\nclaimable. Expired or already-settled checks are rejected, and so is a\ncheck with another claim or reclaim in flight, or one still `creating`.\n\nWhen the transfer is not confirmed in time — or the call fails after\nhanding it over — the answer is `status=processing` with `request_id`\nand `poll_url` (`GET /wallet/v1/requests/{request_id}`), never an error:\nthe transfer may land, and the request settles from the chain.\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2940,7 +2948,7 @@
         },
         "responses": {
           "200": {
-            "description": "Claim settled",
+            "description": "Claim settled, or `processing` until its transfer is confirmed",
             "content": {
               "application/json": {
                 "schema": {
@@ -2968,7 +2976,12 @@
         ],
         "operationId": "reclaimPaymentCheck",
         "summary": "Reclaim an unclaimed payment check",
-        "description": "Returns the (remaining) funds of a payment check the wallet created back\nto the wallet's own intents balance — used to cancel/expire a check that\nwas never claimed. Identified by `check_id` and scoped to the creating\nwallet. Signed by the ephemeral check key (re-derived inside the\nkeystore), not the keystore's wallet key. Omit `amount` for a full\nreclaim or pass a partial amount.\n",
+        "description": "Returns the (remaining) funds of a payment check the wallet created back\nto the wallet's own intents balance — used to cancel/expire a check that\nwas never claimed. Identified by `check_id` and scoped to the creating\nwallet. Signed by the ephemeral check key (re-derived inside the\nkeystore), not the keystore's wallet key. Omit `amount` for a full\nreclaim or pass a partial amount. Answers `processing` + `poll_url` as\n`claimPaymentCheck` does.\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2984,7 +2997,7 @@
         },
         "responses": {
           "200": {
-            "description": "Reclaim settled",
+            "description": "Reclaim settled, or `processing` until its transfer is confirmed",
             "content": {
               "application/json": {
                 "schema": {
@@ -3063,7 +3076,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Optional status filter. Accepts stored statuses (`unclaimed`, `claimed`, `partially_claimed`, `reclaimed`, `partially_reclaimed`) plus the virtual `expired` (unclaimed + past expiry)."
+            "description": "Optional status filter. Accepts stored statuses (`creating`, `unclaimed`, `claiming`, `claimed`, `partially_claimed`, `reclaiming`, `reclaimed`, `partially_reclaimed`, `failed`) plus the virtual `expired` (unclaimed + past expiry)."
           },
           {
             "name": "limit",
@@ -9076,6 +9089,35 @@
           }
         }
       },
+      "LimitOrderProcessing": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "status",
+          "order_id",
+          "poll_url"
+        ],
+        "description": "The order exists and its funding transfer was handed to the relay, but was not confirmed in time (or the call failed after handing it over). Not an error, and not to be retried: the transfer may land. The request settles from the chain — `success` once the transfer executed, or `failed` with `never_executed: true` once its deadline passed unused, and only then is the order cancelled.",
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "processing"
+            ]
+          },
+          "order_id": {
+            "type": "string",
+            "description": "The order being funded; follow it by `GET /wallet/v1/limit-orders/{order_id}`."
+          },
+          "poll_url": {
+            "type": "string",
+            "description": "`GET /wallet/v1/requests/{request_id}` — the funding, until it settles."
+          }
+        }
+      },
       "LimitOrderCancelAllResponse": {
         "type": "object",
         "required": [
@@ -9146,6 +9188,7 @@
         "required": [
           "check_id",
           "check_key",
+          "status",
           "token",
           "amount",
           "created_at"
@@ -9158,7 +9201,19 @@
           },
           "check_key": {
             "type": "string",
-            "description": "The ephemeral account's ed25519 private key (64 hex chars). Bearer secret — whoever holds it can claim the funds. Returned ONCE."
+            "description": "The ephemeral account's ed25519 private key (64 hex chars). Bearer secret — whoever holds it can claim the funds. Returned ONCE, whatever `status` says."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "unclaimed",
+              "creating"
+            ],
+            "description": "`unclaimed`: funded. `creating`: the funding transfer was handed to the relay and is not confirmed yet — follow `poll_url` until the check reads `unclaimed` (or `failed`: the transfer never executed and nothing moved)."
+          },
+          "poll_url": {
+            "type": "string",
+            "description": "Present with `status=creating` — the check's status endpoint."
           },
           "token": {
             "type": "string"
@@ -9212,6 +9267,10 @@
             "items": {
               "$ref": "#/components/schemas/PaymentCheckCreateResponse"
             }
+          },
+          "error": {
+            "type": "string",
+            "description": "Present when the batch stopped before its last check: why, and which checks were not created. Every check listed in `checks` was."
           }
         }
       },
@@ -9237,12 +9296,26 @@
       "PaymentCheckClaimResponse": {
         "type": "object",
         "required": [
+          "request_id",
+          "status",
           "token",
-          "amount_claimed",
-          "remaining",
-          "claimed_at"
+          "amount_claimed"
         ],
         "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "This claim as a request (`GET /wallet/v1/requests/{request_id}`)."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "claimed",
+              "partially_claimed",
+              "processing"
+            ],
+            "description": "The check's status after this claim, or `processing`: the transfer was handed over and is not confirmed yet — follow `poll_url`. The request ends `completed` (its `result` carries `amount_claimed`, `remaining`, `claimed_at`) or `failed` with `never_executed: true` (nothing moved; the check can be claimed again)."
+          },
           "token": {
             "type": "string"
           },
@@ -9251,7 +9324,7 @@
           },
           "remaining": {
             "type": "string",
-            "description": "Amount still claimable on the check after this claim (minimal units)."
+            "description": "Amount still claimable on the check after this claim (minimal units). Absent while `processing`."
           },
           "memo": {
             "type": [
@@ -9261,7 +9334,8 @@
           },
           "claimed_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Absent while `processing`."
           },
           "intent_hash": {
             "type": [
@@ -9269,6 +9343,10 @@
               "null"
             ],
             "description": "base58 solver-relay intent hash for the claim transfer, if returned."
+          },
+          "poll_url": {
+            "type": "string",
+            "description": "Present with `status=processing`."
           }
         }
       },
@@ -9295,12 +9373,26 @@
       "PaymentCheckReclaimResponse": {
         "type": "object",
         "required": [
+          "request_id",
+          "status",
           "token",
-          "amount_reclaimed",
-          "remaining",
-          "reclaimed_at"
+          "amount_reclaimed"
         ],
         "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "This reclaim as a request (`GET /wallet/v1/requests/{request_id}`)."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "reclaimed",
+              "partially_reclaimed",
+              "processing"
+            ],
+            "description": "The check's status after this reclaim, or `processing` — follow `poll_url`, as for a claim."
+          },
           "token": {
             "type": "string"
           },
@@ -9309,11 +9401,12 @@
           },
           "remaining": {
             "type": "string",
-            "description": "Amount still outstanding on the check after this reclaim (minimal units)."
+            "description": "Amount still outstanding on the check after this reclaim (minimal units). Absent while `processing`."
           },
           "reclaimed_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Absent while `processing`."
           },
           "intent_hash": {
             "type": [
@@ -9321,6 +9414,10 @@
               "null"
             ],
             "description": "base58 solver-relay intent hash for the reclaim transfer, if returned."
+          },
+          "poll_url": {
+            "type": "string",
+            "description": "Present with `status=processing`."
           }
         }
       },
@@ -9357,7 +9454,7 @@
           },
           "status": {
             "type": "string",
-            "description": "Lifecycle state: `unclaimed`, `claiming`, `partially_claimed`, `claimed`, `reclaiming`, `partially_reclaimed`, `reclaimed`, or the virtual `expired` (unclaimed and past `expires_at`)."
+            "description": "Lifecycle state: `creating` (funding transfer not confirmed yet), `unclaimed`, `claiming`, `partially_claimed`, `claimed`, `reclaiming`, `partially_reclaimed`, `reclaimed`, `failed` (the funding transfer never executed; nothing moved), or the virtual `expired` (unclaimed and past `expires_at`). A read of a check with a transfer in flight settles it from the chain when the chain can already tell."
           },
           "memo": {
             "type": [
@@ -10728,7 +10825,7 @@
           },
           "status": {
             "type": "string",
-            "description": "Normalized lifecycle status (1Click's UPPERCASE state machine mapped to lowercase): `pending_deposit` → `processing` → `success` / `failed` / `refunded`. `pending_approval` is returned instead when a multisig wallet must approve the op first. The raw upstream status is in the request row's `result.oneclick_status`.",
+            "description": "Normalized lifecycle status (1Click's UPPERCASE state machine mapped to lowercase): `pending_deposit` → `processing` → `success` / `failed` / `refunded`. `pending_approval` is returned instead when a multisig wallet must approve the op first. The raw upstream status is in the request row's `result.oneclick_status`. A call answers `processing` with a `poll_url` when the intent was submitted and the upstream's answer was lost: the intent may have been taken, so do not retry — the request settles on its own.",
             "enum": [
               "pending_deposit",
               "processing",
@@ -10768,6 +10865,10 @@
           "request_hash": {
             "type": "string",
             "description": "Present only on `pending_approval` — sha256(canonical_json(op)); sign this to approve."
+          },
+          "poll_url": {
+            "type": "string",
+            "description": "Present with `status=processing` — `GET /wallet/v1/requests/{request_id}`."
           }
         }
       },

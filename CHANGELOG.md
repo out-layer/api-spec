@@ -4,6 +4,49 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+### Upgrading a client
+
+What an integration has to change for the entries below. Each point is safe
+against the current server and the previous one.
+
+1. **Send `X-Idempotency-Key`**, not `Idempotency-Key`, on every write. The
+   server now reads both. Before, it ignored the second, and a retried write ran
+   again.
+2. **Read `status`, not the HTTP code.** A `200` can answer `processing`: the
+   money was handed over and its outcome is not known yet. Do not retry it; that
+   is how a payment is made twice. Poll `poll_url` (`GET
+   /wallet/v1/requests/{request_id}`) until the status is terminal. This applies
+   to `intentsWithdraw`, `intentsSwap`, `intentsTransfer`,
+   `claimPaymentCheck`, `reclaimPaymentCheck`, `createLimitOrder` (the
+   `LimitOrderProcessing` answer) and every confidential op. It also applies to
+   anything that credits a user, ships goods or releases funds on a call's
+   success: do that on the terminal status.
+3. **Terminal request statuses:**
+   - `success`, or `completed` for a payment check leg;
+   - `failed`. With `result.never_executed` or `result.never_submitted` set,
+     nothing moved, and a retry with a NEW idempotency key is safe;
+   - `refunded` (confidential);
+   - `needs_review`: the outcome could not be established. Do not retry; see
+     the request's `result.reason`.
+4. **Payment checks:**
+   - **Create.** Keep `check_key` whatever `status` says. `creating` means the
+     funding is unconfirmed: the check cannot be claimed or reclaimed until it
+     reads `unclaimed` (poll `poll_url`). `failed` means it was never funded.
+   - **Claim and reclaim.** A strict decoder must make `remaining`,
+     `claimed_at` and `reclaimed_at` optional: they are absent while the answer
+     is `processing`. New fields: `request_id`, `status`, `poll_url`.
+   - **Batch create.** Can answer `200` with fewer checks than asked and an
+     `error`. The checks listed exist and are funded or being funded; the rest
+     were not created.
+   - **Status and list.** New check statuses: `creating`, `claiming`,
+     `reclaiming`, `failed`.
+5. **Idempotency keys are spent by failed attempts too.** A write refused
+   before anything moved still holds its key, and resending the same key answers
+   `duplicate_idempotency_key` with that request. Retry a refused write under a
+   new key.
+6. **Webhooks.** A `request_completed` webhook can arrive after the call that
+   started the request has answered.
+
 ### Fixed
 
 - **The idempotency header is `X-Idempotency-Key`.** The `IdempotencyKey`
@@ -19,6 +62,23 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Changed
 
+- **Payment checks, limit orders and confidential ops settle past their
+  response.** Every transfer they hand over is recorded before it leaves and
+  settled from the chain (checks, limit order funding) or the confidential
+  status (confidential ops) when its call stops watching.
+  - `createPaymentCheck` / `batchCreatePaymentChecks`: a check carries `status`
+    — `unclaimed`, or `creating` + `poll_url` while its funding is unconfirmed —
+    and its `check_key` is returned either way. A batch is checked against the
+    balance whole before any check is funded, and one that stops part way lists
+    the checks it created with `error` naming the rest.
+  - `claimPaymentCheck` / `reclaimPaymentCheck` answer `request_id` and
+    `status`; `processing` + `poll_url` while the transfer is unconfirmed
+    (`remaining` and the timestamp then absent). Both take `X-Idempotency-Key`.
+    New check statuses: `creating`, `failed`.
+  - `createLimitOrder` can answer `LimitOrderProcessing` (`order_id`,
+    `poll_url`); an order is cancelled for an unexecuted funding only once the
+    chain shows it never executed.
+  - Confidential ops can answer `processing` + `poll_url`.
 - **Withdraw, swap and transfer settle past their response.** A synchronous
   `intentsWithdraw` (same-chain included), `intentsSwap` or `intentsTransfer`
   whose settlement outlasts its wait answers `status=processing` with a
