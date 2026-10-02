@@ -6150,7 +6150,7 @@
         }
       },
       "IdempotencyKey": {
-        "name": "Idempotency-Key",
+        "name": "X-Idempotency-Key",
         "in": "header",
         "required": false,
         "schema": {
@@ -8358,7 +8358,7 @@
       },
       "WithdrawResponse": {
         "type": "object",
-        "description": "Response for `intentsWithdraw` (same-chain AND cross-chain). On a\nmultisig wallet that requires approval, `status=pending_approval` and the\n`approval_id` / `required` / `approved` / `request_hash` fields are\npopulated; approvers sign `request_hash` (see `Nep413Auth`). On the\ndirect path these fields are omitted/null.\n\nAlso the response of `intentsTransfer`.\n\nA synchronous call answers once the withdrawal settles. When settlement\noutlasts its wait — the solver relay for a same-chain withdraw, the\nbridge for a cross-chain one — it answers `status=processing` with a\n`poll_url`, and the request settles on its own. The withdrawal runs to\nits outcome even if the caller disconnects.\n",
+        "description": "Response for `intentsWithdraw` (same-chain AND cross-chain). On a\nmultisig wallet that requires approval, `status=pending_approval` and the\n`approval_id` / `required` / `approved` / `request_hash` fields are\npopulated; approvers sign `request_hash` (see `Nep413Auth`). On the\ndirect path these fields are omitted/null.\n\nAlso the response of `intentsTransfer`.\n\nA synchronous call answers once the withdrawal settles. When settlement\noutlasts its wait — the solver relay for a same-chain withdraw, the\nbridge for a cross-chain one — or anything fails after the funds were\nhanded over, it answers `status=processing` with a `poll_url`, and the\nrequest settles on its own. It never answers an error once funds may\nhave moved. The withdrawal runs to its outcome even if the caller\ndisconnects.\n",
         "required": [
           "request_id",
           "status"
@@ -8481,7 +8481,7 @@
       },
       "SwapResponse": {
         "type": "object",
-        "description": "Response for `intentsSwap`. Swap is a **Trusted** op, so on a multisig\nwallet it can return `status=pending_approval` with the\n`approval_id` / `required` / `approved` / `request_hash` fields populated\n(same shape as `WithdrawResponse`); the swap executes only after the\napproval threshold is met. On the direct path those fields are omitted and\n`amount_out` / `intent_hash` carry the settled result.\n\nWhen settlement outlasts the call's wait it answers `status=processing`\nwith the quoted `amount_out` and a `poll_url`, and the request settles on\nits own. The swap runs to its outcome even if the caller disconnects.\n",
+        "description": "Response for `intentsSwap`. Swap is a **Trusted** op, so on a multisig\nwallet it can return `status=pending_approval` with the\n`approval_id` / `required` / `approved` / `request_hash` fields populated\n(same shape as `WithdrawResponse`); the swap executes only after the\napproval threshold is met. On the direct path those fields are omitted and\n`amount_out` / `intent_hash` carry the settled result.\n\nWhen settlement outlasts the call's wait, or anything fails after the\ntransfer was handed over, it answers `status=processing` with a\n`poll_url` (and the quoted `amount_out` when it has one), and the request\nsettles on its own. The swap runs to its outcome even if the caller\ndisconnects.\n",
         "required": [
           "request_id",
           "status"

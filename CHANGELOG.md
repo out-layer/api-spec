@@ -4,6 +4,19 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+### Fixed
+
+- **The idempotency header is `X-Idempotency-Key`.** The `IdempotencyKey`
+  parameter named it `Idempotency-Key`; the coordinator now reads both, the
+  documented name first. A write retried under the old name used to run again
+  instead of answering `duplicate_idempotency_key`.
+- **No error after funds may have moved.** A synchronous withdraw, swap or
+  transfer that fails after handing its funds over answers
+  `status=processing` with a `poll_url`, not an HTTP 5xx a caller would retry.
+- **Every late settlement is announced.** A request settled after its call
+  answered sends its `request_completed` webhook once, whether a status read
+  or the background settler closed it.
+
 ### Changed
 
 - **Withdraw, swap and transfer settle past their response.** A synchronous
