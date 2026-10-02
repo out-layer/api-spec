@@ -4,6 +4,17 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+### Changed
+
+- **Withdraw, swap and transfer settle past their response.** A synchronous
+  `intentsWithdraw` (same-chain included), `intentsSwap` or `intentsTransfer`
+  whose settlement outlasts its wait answers `status=processing` with a
+  `poll_url` (new on `SwapResponse`) and settles on its own. The operation runs to its outcome
+  even if the caller disconnects. In the request's `result`,
+  `settled_late: true` marks one settled from the chain afterwards, and a
+  `failed` one with `never_executed: true` or `never_submitted: true` moved
+  no funds.
+
 ### Added
 
 - **Notices.** `TaskKind` gains `notice`: a task that tells the owner
