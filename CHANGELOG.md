@@ -49,6 +49,38 @@ against the current server and the previous one.
 
 ### Fixed
 
+- `Approver.pubkey` is optional, as the server always treated it. With it, the
+  approver votes only with that key; without it, with any access key of the
+  account, or through its wallet contract.
+
+- `approveRequest`, `rejectRequest`: `public_key` must be a full-access key of
+  `account_id` on chain; otherwise `401 invalid_signature`, and nothing is
+  stored. Before, any key could vote in an approver's name and take that
+  approver's vote, and a function-call key held by an application could vote
+  as the approver. A chain that cannot be read answers `503` with `Retry-After`.
+- `Bearer near:`, `register` with a NEAR proof and `PUT /wallet/v1/api-key`:
+  the signing key must be a full-access key of the account (or the key of an
+  implicit account not created yet). A function-call key is refused.
+- `approveRequest`, `rejectRequest`: a second vote by the same account, in
+  either direction, is `409 already_approved`. A reject after an approve
+  answered `500`.
+- `approveRequest`, `rejectRequest`: a vote on an approval that is no longer
+  pending is `409 conflict` naming its state. It answered `500`.
+- `rejectRequest`: a reject from an approver without a pinned key now cancels
+  the request at once, as one from a pinned approver did. The keystore already
+  honoured it as a veto; the request sat in `pending_approval` until it expired.
+- Approval counts (`approved_count`, `approval_count`, and the threshold) count
+  approve votes only. A reject vote from anyone used to count toward the
+  threshold, so one approve plus a stranger's reject could start an execution
+  the keystore then refused.
+- `approveRequest`, `rejectRequest`: a vote from an account the wallet's policy
+  does not admit is `403 not_approver` and is not stored — an account not
+  listed, one pinned to another key, or a pinned one voting through a wallet
+  contract. A stranger's approve used to count toward the threshold, and a
+  stranger's reject was stored and answered `reject_vote_recorded`. A refusal is
+  decided on the policy as the chain holds it, so an approver added a moment
+  ago is admitted; a chain that cannot be read is `503`.
+
 - **The idempotency header is `X-Idempotency-Key`.** The `IdempotencyKey`
   parameter named it `Idempotency-Key`; the coordinator now reads both, the
   documented name first. A write retried under the old name used to run again
@@ -89,6 +121,16 @@ against the current server and the previous one.
   no funds.
 
 ### Added
+
+- **Votes from contract wallets.** `approveRequest` and `rejectRequest` accept a
+  second body, `ContractVoteAuth` `{account_id, authorization}`, from an
+  approver without access keys: a NEP-616 wallet contract owned by an EVM key
+  or a passkey. The wallet's own `w_resolve_auth` must resolve `authorization`
+  to the vote message. Accepted from wallet builds the deployment lists; a vote
+  from any other account is `400`, a vote the wallet does not resolve to this
+  message is `401 invalid_signature` naming the wallet's reason.
+- `ApprovalDetail.approvers[].proof_kind`: `nep413` or `contract`.
+  `approvers[].signature` is `null` for a contract vote.
 
 - **Notices.** `TaskKind` gains `notice`: a task that tells the owner
   something and asks nothing. `InboxTask.reply_pubkey` is `null` for one.

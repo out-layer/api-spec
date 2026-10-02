@@ -91,7 +91,7 @@
         ],
         "operationId": "registerWallet",
         "summary": "Register a new wallet",
-        "description": "Creates a new multi-chain wallet and returns an API key. For most\ncallers, send `{}` — an anonymous wallet is created and an API key is\nreturned in `api_key` (shown once, not retrievable later).\n\nOptional fields enable advanced registration paths:\n- `account_id` + `pubkey` + `message` + `signature`: bind the wallet to\n  a NEAR account via NEP-413 proof-of-ownership.\n- `vault_id`: bind to a customer-owned vault for sovereign custody (see\n  vault docs).\n\nRate-limited: 30 requests per minute per IP.\n",
+        "description": "Creates a new multi-chain wallet and returns an API key. For most\ncallers, send `{}` — an anonymous wallet is created and an API key is\nreturned in `api_key` (shown once, not retrievable later).\n\nOptional fields enable advanced registration paths:\n- `account_id` + `pubkey` + `message` + `signature`: bind the wallet to\n  a NEAR account via proof-of-ownership. `pubkey` must be a full-access\n  key of `account_id` (or the key of an implicit account not created\n  yet); a function-call key is refused. The same holds for every\n  `Bearer near:` request and for `PUT /wallet/v1/api-key`.\n- `vault_id`: bind to a customer-owned vault for sovereign custody (see\n  vault docs).\n\nRate-limited: 30 requests per minute per IP.\n",
         "security": [],
         "requestBody": {
           "required": false,
@@ -3720,8 +3720,8 @@
           "Approvals"
         ],
         "operationId": "approveRequest",
-        "summary": "Approve a pending action (NEP-413 signed)",
-        "description": "Submits an approver's NEP-413 signature for a pending action. When the\napproval threshold is reached, the action auto-executes. No API key\nrequired — auth is established by the NEP-413 signature in the body.\n",
+        "summary": "Approve a pending action",
+        "description": "Submits an approver's vote for a pending action: a NEP-413 signature by\none of the approver's full-access keys, or, for an approver without keys, an\nauthorization its wallet contract resolves (`ContractVoteAuth`). When\nthe approval threshold is reached, the action auto-executes. No API key\nrequired — the vote itself proves who cast it.\n",
         "security": [],
         "parameters": [
           {
@@ -3739,7 +3739,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Nep413Auth"
+                "$ref": "#/components/schemas/ApproveRequest"
               }
             }
           }
@@ -3755,14 +3755,54 @@
               }
             }
           },
+          "400": {
+            "description": "`bad_request`: both proofs or neither; or a contract vote from an\naccount that does not run a wallet build this deployment accepts.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_signature`: the NEP-413 signature does not verify, or\n`public_key` is not a full-access key of `account_id` on chain (a\nvote is signed by the wallet of the account it names; a\nfunction-call key, held by applications the owner logged into,\ndoes not vote); or the approver's\nwallet did not resolve the authorization to this vote's message —\nthe message names the wallet's own reason.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "description": "`not_approver`: the account is not an approver this wallet's\npolicy admits for this vote — not listed, or pinned to another key,\nor pinned at all for a contract-wallet vote. Decided on the policy\nas the chain holds it; nothing is stored.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "409": {
+            "description": "`already_approved`: this account has already voted on this\napproval, approve or reject. One vote per account.\n`conflict`: the approval is no longer pending (approved, rejected\nor expired); the message names its state. Stop; do not retry.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -3773,7 +3813,8 @@
           "Approvals"
         ],
         "operationId": "rejectRequest",
-        "summary": "Reject a pending action (NEP-413 signed)",
+        "summary": "Reject a pending action",
+        "description": "A NO vote, proven the same two ways as an approve vote. A reject from a\npolicy approver vetoes the action.\n",
         "security": [],
         "parameters": [
           {
@@ -3807,14 +3848,54 @@
               }
             }
           },
+          "400": {
+            "description": "`bad_request`: both proofs or neither; or a contract vote from an\naccount that does not run a wallet build this deployment accepts.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_signature`: the NEP-413 signature does not verify, or\n`public_key` is not a full-access key of `account_id` on chain (a\nvote is signed by the wallet of the account it names; a\nfunction-call key, held by applications the owner logged into,\ndoes not vote); or the approver's\nwallet did not resolve the authorization to this vote's message —\nthe message names the wallet's own reason.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "description": "`not_approver`: the account is not an approver this wallet's\npolicy admits for this vote — not listed, or pinned to another key,\nor pinned at all for a contract-wallet vote. Decided on the policy\nas the chain holds it; nothing is stored.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "409": {
+            "description": "`already_approved`: this account has already voted on this\napproval, approve or reject. One vote per account.\n`conflict`: the approval is no longer pending (approved, rejected\nor expired); the message names its state. Stop; do not retry.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -8371,7 +8452,7 @@
       },
       "WithdrawResponse": {
         "type": "object",
-        "description": "Response for `intentsWithdraw` (same-chain AND cross-chain). On a\nmultisig wallet that requires approval, `status=pending_approval` and the\n`approval_id` / `required` / `approved` / `request_hash` fields are\npopulated; approvers sign `request_hash` (see `Nep413Auth`). On the\ndirect path these fields are omitted/null.\n\nAlso the response of `intentsTransfer`.\n\nA synchronous call answers once the withdrawal settles. When settlement\noutlasts its wait — the solver relay for a same-chain withdraw, the\nbridge for a cross-chain one — or anything fails after the funds were\nhanded over, it answers `status=processing` with a `poll_url`, and the\nrequest settles on its own. It never answers an error once funds may\nhave moved. The withdrawal runs to its outcome even if the caller\ndisconnects.\n",
+        "description": "Response for `intentsWithdraw` (same-chain AND cross-chain). On a\nmultisig wallet that requires approval, `status=pending_approval` and the\n`approval_id` / `required` / `approved` / `request_hash` fields are\npopulated; approvers vote over `request_hash` (see `Nep413Auth`, or\n`ContractVoteAuth` for an approver without keys). On the\ndirect path these fields are omitted/null.\n\nAlso the response of `intentsTransfer`.\n\nA synchronous call answers once the withdrawal settles. When settlement\noutlasts its wait — the solver relay for a same-chain withdraw, the\nbridge for a cross-chain one — or anything fails after the funds were\nhanded over, it answers `status=processing` with a `poll_url`, and the\nrequest settles on its own. It never answers an error once funds may\nhave moved. The withdrawal runs to its outcome even if the caller\ndisconnects.\n",
         "required": [
           "request_id",
           "status"
@@ -9814,8 +9895,7 @@
       "Approver": {
         "type": "object",
         "required": [
-          "id",
-          "pubkey"
+          "id"
         ],
         "properties": {
           "id": {
@@ -9824,7 +9904,7 @@
           },
           "pubkey": {
             "type": "string",
-            "description": "Approver's NEAR public key (`ed25519:<base58>`), pinned on-chain. The approver's NEP-413 vote signature is verified against this key."
+            "description": "Optional. Pins the approver to this NEAR public key (`ed25519:<base58>`): only a NEP-413 vote signed by it counts, and a contract-wallet vote from this approver never does. Without it, a NEP-413 vote counts when signed by any full-access key of the account (checked on chain), and an approver without keys may vote through its wallet contract (`ContractVoteAuth`)."
           },
           "role": {
             "type": "string",
@@ -10319,7 +10399,7 @@
           },
           "request_hash": {
             "type": "string",
-            "description": "Canonical request hash to SIGN — approvers sign `approve:{approval_id}:{wallet_pubkey}:{request_hash}` (see `Nep413Auth`)."
+            "description": "Canonical request hash to SIGN — approvers sign `approve:{approval_id}:{wallet_pubkey}:{request_hash}` (see `Nep413Auth`), or have their wallet contract resolve it (see `ContractVoteAuth`)."
           },
           "decision": {
             "type": "string",
@@ -10332,7 +10412,8 @@
             "type": "integer"
           },
           "approved": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Approve votes so far. Reject votes are not counted toward the threshold."
           },
           "expires_at": {
             "type": "string",
@@ -10356,7 +10437,7 @@
       },
       "ApprovalDetail": {
         "type": "object",
-        "description": "Public, read-only detail for one pending approval (`getApprovalDetail`). Returns only non-sensitive metadata. `wallet_pubkey` + `request_hash` are what an approver binds into the NEP-413 vote (see `Nep413Auth`); the dashboard renders `op`.",
+        "description": "Public, read-only detail for one pending approval (`getApprovalDetail`). Returns only non-sensitive metadata. `wallet_pubkey` + `request_hash` are what an approver binds into its vote (see `Nep413Auth` and `ContractVoteAuth`); the dashboard renders `op`.",
         "required": [
           "id",
           "wallet_id",
@@ -10437,6 +10518,7 @@
                 "approver_id",
                 "approver_role",
                 "signature",
+                "proof_kind",
                 "created_at"
               ],
               "properties": {
@@ -10444,10 +10526,23 @@
                   "type": "string"
                 },
                 "approver_role": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "`signer` for an approve vote, `reject` for a reject vote."
                 },
                 "signature": {
-                  "type": "string"
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The NEP-413 signature; null for a contract-wallet vote."
+                },
+                "proof_kind": {
+                  "type": "string",
+                  "enum": [
+                    "nep413",
+                    "contract"
+                  ],
+                  "description": "How the vote was proven — a key signature, or the approver's wallet contract."
                 },
                 "created_at": {
                   "type": "string",
@@ -10482,18 +10577,66 @@
           }
         }
       },
-      "RejectRequest": {
-        "allOf": [
+      "ContractVoteAuth": {
+        "type": "object",
+        "description": "A vote from an approver without access keys: a NEP-616 wallet contract\nowned by an EVM key or a passkey. `authorization` is the blob the\napprover's wallet resolves, sent verbatim; its payload must be the same\nstring a key holder signs, `approve:{approval_id}:{wallet_pubkey}:{request_hash}`\nor `reject:{approval_id}:{wallet_pubkey}:{request_hash}`.\n\nAccepted only from an account running a wallet build this deployment\nlists. The coordinator calls `w_is_signature_allowed` and\n`w_resolve_auth` on `account_id` at one block before storing the vote,\nand the keystore does again before signing. EIP-712 wallets resolve\nwith `{purpose: \"PROVE_OWNERSHIP\", recipient, authorization}`, where\n`recipient` is this deployment's contract id (`outlayer.near` on\nmainnet, `outlayer.testnet` on testnet). Passkey (NEP-641) wallets\nresolve with `{path: [], authorization}`; an authorization that leaves\nsub-authorizations pending is refused. A passkey message timestamped in\nthe future is refused by the wallet itself; sign with a timestamp a\nlittle in the past.\n",
+        "required": [
+          "account_id",
+          "authorization"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "authorization": {
+            "type": "string",
+            "maxLength": 8192
+          }
+        }
+      },
+      "ApproveRequest": {
+        "description": "Exactly one proof. Both, or neither, is a 400.",
+        "oneOf": [
           {
             "$ref": "#/components/schemas/Nep413Auth"
           },
           {
-            "type": "object",
-            "properties": {
-              "reason": {
-                "type": "string"
+            "$ref": "#/components/schemas/ContractVoteAuth"
+          }
+        ]
+      },
+      "RejectRequest": {
+        "description": "Exactly one proof, and an optional reason. Both proofs, or neither, is a 400.",
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Nep413Auth"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                }
               }
-            }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractVoteAuth"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
           }
         ]
       },
@@ -10520,7 +10663,8 @@
             ]
           },
           "approved": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Approve votes so far. Reject votes are not counted toward the threshold."
           },
           "required": {
             "type": "integer"
