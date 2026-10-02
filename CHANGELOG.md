@@ -4,6 +4,8 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+## [0.1.0-alpha.3] — 2026-10-02
+
 ### Upgrading a client
 
 What an integration has to change for the entries below. Each point is safe
@@ -131,6 +133,10 @@ against the current server and the previous one.
   message is `401 invalid_signature` naming the wallet's reason.
 - `ApprovalDetail.approvers[].proof_kind`: `nep413` or `contract`.
   `approvers[].signature` is `null` for a contract vote.
+
+## [0.1.0-alpha.2] — 2026-10-02
+
+### Added
 
 - **Notices.** `TaskKind` gains `notice`: a task that tells the owner
   something and asks nothing. `InboxTask.reply_pubkey` is `null` for one.
