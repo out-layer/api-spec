@@ -3861,7 +3861,7 @@
         ],
         "operationId": "openOwnerSession",
         "summary": "Sign in on a device",
-        "description": "Opens a session from one statement the owner's wallet signed (NEP-413,\nrecipient: the OutLayer contract, a fresh 32-byte nonce):\n\n    Sign in to OutLayer as {account_id}. Device key: {device_pubkey}. Valid until {valid_until as YYYY-MM-DDTHH:MM:SSZ}.\n\nThe sentence is rebuilt here from the three fields, so what was signed\nis exactly it. The key that signed must be a full-access key of the\naccount on chain. One statement opens one session. An account has\nfive devices in force at most, each with a session of its own; one\nmore retires the device signed in longest ago, which is answered 401\n`session_replaced` from then on.\n",
+        "description": "Opens a session from one statement the owner's wallet signed (NEP-413,\nrecipient: the OutLayer contract, a fresh 32-byte nonce):\n\n    Sign in to OutLayer as {account_id}. Device key: {device_pubkey}. Valid until {valid_until as YYYY-MM-DDTHH:MM:SSZ}.\n\nThe sentence is rebuilt here from the three fields, so what was signed\nis exactly it. The key that signed must be a full-access key of the\naccount on chain; an implicit account (64 hex) that is not on chain\nyet is signed for by its own key. A custody wallet signs with\n`POST /wallet/v1/sign-message` (`recipient`: the OutLayer contract);\nits `signature_base64`, `public_key` and `nonce` are the three fields\nhere. One statement opens one session. An account has\nfive devices in force at most, each with a session of its own; one\nmore retires the device signed in longest ago, which is answered 401\n`session_replaced` from then on.\n",
         "security": [],
         "requestBody": {
           "required": true,
@@ -4300,6 +4300,7 @@
             }
           },
           "400": {
+            "description": "`invalid_request`: the reason is empty or over its bound, or the task is a notice — Got it closes it.",
             "$ref": "#/components/responses/InboxRefused"
           },
           "401": {
@@ -4310,6 +4311,55 @@
           },
           "409": {
             "description": "`task_closed` with `state`: an `approved` task cannot be rejected — the owner said yes and a run may be acting.",
+            "$ref": "#/components/responses/InboxRefused"
+          },
+          "503": {
+            "$ref": "#/components/responses/InboxUnavailable"
+          }
+        }
+      }
+    },
+    "/inbox/tasks/{id}/acknowledge": {
+      "post": {
+        "tags": [
+          "Inbox"
+        ],
+        "operationId": "acknowledgeInboxTask",
+        "summary": "Got it — close a notice as seen",
+        "description": "The session alone: no wallet signature, no run. An open notice of the\nowner's is `done`; what it showed is deleted, as with every close, and\nits preparer reads it `done`. No event is sent for it. A task that is\nnot a notice is approved or rejected, not acknowledged: 400.\n",
+        "security": [
+          {
+            "OwnerSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TaskId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Seen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxTaskMoved"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`: the task is not a notice.",
+            "$ref": "#/components/responses/InboxRefused"
+          },
+          "401": {
+            "$ref": "#/components/responses/InboxRefused"
+          },
+          "404": {
+            "$ref": "#/components/responses/InboxRefused"
+          },
+          "409": {
+            "description": "`task_closed` with `state`: the notice is not `open` — seen, cancelled or expired already.",
             "$ref": "#/components/responses/InboxRefused"
           },
           "503": {
@@ -4389,6 +4439,7 @@
             }
           },
           "400": {
+            "description": "`invalid_request`: a hash that is not one, a supply that the task's kind does not take, or a notice, which takes no answer — judged before the signature is spent.",
             "$ref": "#/components/responses/InboxRefused"
           },
           "401": {
@@ -4589,7 +4640,7 @@
         ],
         "operationId": "setInboxWebhook",
         "summary": "Name the URL task events go to",
-        "description": "`task_created`, `task_approved`, `task_answered`, `task_failed`\n(with `failure_reason`) and `task_expired` are POSTed there,\nsigned with a secret of the owner's own (`X-Webhook-Signature`, the\nHMAC-SHA256 of the body in hex), with `X-Wallet-Id: owner:{account}`.\nThe secret is in the answer to this call and nowhere else. A body says who asked whom, of what\nkind and when, and links to the inbox; nothing of what the task shows.\nThe URL is an HTTPS URL on a public host, without credentials in it;\nthe sender follows no redirect. The URL stays in force when the\nsession that named it ends, and says which session that was.\n\nNaming the URL takes the owner's signature beside the session (see\n`OwnerConfirmation`): the sentence names the URL by its SHA-256.\nWithout one that holds: 403 `confirmation_required`.\n",
+        "description": "`task_created`, `task_approved`, `task_answered`, `task_failed`\n(with `failure_reason`) and `task_expired` are POSTed there,\nsigned with a secret of the owner's own (`X-Webhook-Signature`, the\nHMAC-SHA256 of the body in hex), with `X-Wallet-Id: owner:{account}`.\nThe secret is in the answer to this call and nowhere else. A body says who asked whom, of what\nkind and when, and links to the inbox; nothing of what the task shows.\nA notice is told as `task_created` with `kind: notice`; Got it sends\nnothing.\nThe URL is an HTTPS URL on a public host, without credentials in it;\nthe sender follows no redirect. The URL stays in force when the\nsession that named it ends, and says which session that was.\n\nNaming the URL takes the owner's signature beside the session (see\n`OwnerConfirmation`): the sentence names the URL by its SHA-256.\nWithout one that holds: 403 `confirmation_required`.\n",
         "security": [
           {
             "OwnerSession": []
@@ -6525,10 +6576,11 @@
       },
       "TaskKind": {
         "type": "string",
-        "description": "`confirm` — yes or no; `input` — the owner supplies something.",
+        "description": "`confirm` — yes or no; `input` — the owner supplies something; `notice` — tells the owner something and asks nothing: no operation answers it, no reply key, no run follows it, and Got it closes it.",
         "enum": [
           "confirm",
-          "input"
+          "input",
+          "notice"
         ]
       },
       "InboxTask": {
@@ -6597,8 +6649,11 @@
             "$ref": "#/components/schemas/TaskFailureReason"
           },
           "reply_pubkey": {
-            "type": "string",
-            "description": "`p256:` and the uncompressed point in base64url: what the owner's answer, note and reason are encrypted to."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`p256:` and the uncompressed point in base64url: what the owner's answer, note and reason are encrypted to. `null` for a notice, which takes none."
           },
           "content": {
             "type": [
@@ -6762,7 +6817,7 @@
           },
           "signature": {
             "type": "string",
-            "description": "Base64, 64 bytes."
+            "description": "Base64, 64 bytes; `signature_base64` of `POST /wallet/v1/sign-message`, not its `ed25519:` form."
           },
           "nonce": {
             "type": "string",

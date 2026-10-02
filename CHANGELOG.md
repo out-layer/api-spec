@@ -6,13 +6,21 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Added
 
+- **Notices.** `TaskKind` gains `notice`: a task that tells the owner
+  something and asks nothing. `InboxTask.reply_pubkey` is `null` for one.
+  `POST /inbox/tasks/{id}/acknowledge` (Got it) closes an open notice as
+  `done`, inside the session, with no signature and no event; approve and
+  reject of a notice are 400 `invalid_request`, an approval before its nonce
+  is spent. The event of a new notice is `task_created` with `kind: notice`.
+
 - **`GET /public/connectors/{id}/describe` carries `callers`**: the manifest's
   block of which doors a run may come through (`direct`, `contract` — `allow`,
   `deny` or `{only: [...]}` — `https`, `meta_tx`), as written; `null` when the
   manifest declares none.
 - **Inbox: tasks between an agent and its owner.** `POST`/`DELETE /inbox/session`
   (an owner's session opened by one NEP-413 statement signed by a full-access
-  key; five devices an account), `GET /inbox/tasks` (ciphertext for the
+  key — for an implicit account not on chain yet, its own key; a custody
+  wallet signs with `/wallet/v1/sign-message`; five devices an account), `GET /inbox/tasks` (ciphertext for the
   device, `more` when the list is cut), `/inbox/tasks/{id}` (delete),
   `/reject`, `/files/{n}`, `/origin`, `/inbox/mutes`, `/inbox/devices`,
   `/inbox/webhook` (a secret told once, events signed with it). Withdrawing
