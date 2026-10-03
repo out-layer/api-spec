@@ -40,7 +40,10 @@ ones that change how a money call is made and followed.
 4. **Terminal request statuses:**
    - `success`, or `completed` for a payment check leg;
    - `failed`. With `result.never_executed` or `result.never_submitted` set,
-     nothing moved, and a retry with a NEW idempotency key is safe;
+     nothing moved, and a retry with a NEW idempotency key is safe. Without
+     them, funds may have moved: a bridge that failed or refunded
+     (`result.reason`), or a NEAR transaction that failed on chain after its
+     gas was spent. Reconcile the balance before acting again;
    - `refunded` (confidential);
    - `needs_review`: the outcome could not be established. Do not retry; see
      the request's `result.reason`.
@@ -62,7 +65,7 @@ ones that change how a money call is made and followed.
    policy, `wallet_busy`, a bad `X-Answer-Within` — holds nothing, and the same
    key may be sent again. Retry a `failed` with `never_executed` or
    `never_submitted` under a NEW key; any other `failed`, or `needs_review`: do
-   not.
+   not — it may have moved funds (item 4); reconcile the balance first.
 7. **Recover after a timeout or a dropped connection by re-sending with the
    same key.** The answer is HTTP `200` with `error: duplicate_idempotency_key`
    and the request it belongs to: `request_id`, `type`, `status`, `created_at`,

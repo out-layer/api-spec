@@ -8559,7 +8559,11 @@ components:
               outcome was settled from the chain after its response came
               back `processing`. A `failed` request carrying
               `never_executed: true` or `never_submitted: true` moved no
-              funds and is safe to retry.
+              funds and is safe to retry under a new idempotency key. A
+              `failed` one without them may have moved funds — a bridge
+              that failed or refunded (`result.reason`), or a NEAR
+              transaction that failed on chain after its gas was spent —
+              so reconcile the balance before acting again.
             - Other request types are not yet schema-documented; treat the
               object as opaque until added in a later spec release.
 
