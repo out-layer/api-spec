@@ -1161,6 +1161,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/AnswerWithin"
           }
         ],
         "requestBody": {
@@ -1280,6 +1283,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/AnswerWithin"
           }
         ],
         "requestBody": {
@@ -1339,6 +1345,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/AnswerWithin"
           }
         ],
         "requestBody": {
@@ -2544,6 +2553,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/AnswerWithin"
           }
         ],
         "requestBody": {
@@ -2814,6 +2826,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/AnswerWithin"
           }
         ],
         "requestBody": {
@@ -2869,6 +2884,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/AnswerWithin"
           }
         ],
         "requestBody": {
@@ -2931,6 +2949,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/AnswerWithin"
           }
         ],
         "requestBody": {
@@ -2980,6 +3001,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/AnswerWithin"
           }
         ],
         "requestBody": {
@@ -6250,7 +6274,18 @@
         "schema": {
           "type": "string"
         },
-        "description": "Optional idempotency token, scoped to `(wallet, key)`; the request body\nis never compared. Resubmitting a write request with a key already seen\ndoes NOT re-execute it and does NOT return the stored result: it\nanswers **HTTP `200`** with\n`{\"error\":\"duplicate_idempotency_key\",\"message\":\"Request already processed: <request_id>\"}`\n— a pointer to the original request, not an error for a retry. Read the\noutcome with `GET /wallet/v1/requests/{request_id}`. Because the status\nis `200`, a client has to check `error` in the body. Use one key per\nlogical operation; with no header the server mints a fresh key per\ncall, so nothing is deduplicated. Recommended for clients that retry\non network failure.\n"
+        "description": "One key per operation, scoped to `(wallet, key)`; the request body is\nnever compared. The key is written on the request row BEFORE any funds\nmove, so a key seen again names the request that reserved it, whatever\nbecame of it, and nothing runs twice.\n\nA seen key answers **HTTP `200`** with `error: duplicate_idempotency_key`\nand the request it belongs to:\n```json\n{\"error\": \"duplicate_idempotency_key\",\n \"message\": \"Request already processed: <request_id>\",\n \"request_id\": \"<request_id>\", \"type\": \"withdraw\", \"status\": \"processing\",\n \"result\": {...}, \"poll_url\": \"/wallet/v1/requests/<request_id>\",\n \"created_at\": \"...\", \"updated_at\": \"...\"}\n```\n`status` is the request's as recorded; `poll_url` is present while it is\nnot terminal (`success`/`completed`, `failed`, `refunded`,\n`needs_review`); `result` and `updated_at` once the row has them.\nBecause the HTTP code is `200`, branch on `error` in the body.\n\nFor `createPaymentCheck` and `batchCreatePaymentChecks` the body also\ncarries `checks`: `[{check_id, check_key, status}]` — the checks that\nkey made, each with its key derived again for the API key that asks.\nA caller that lost the create's answer gets its only copy back here.\n`check_key` is `null` when the asking API key is not the one the check\nwas created with (a key of the same wallet under another vault derives\na different key): re-send with the key that created it. A batch lists\nthe checks reserved so far while its request is `processing`, and all\nof them once it is `completed`.\nIf the re-derivation cannot be done (the keystore does not answer), the\nre-send is refused like any keystore call and can be sent again.\n\nA key is held by the request that reserved it, including one that ended\n`failed` after the reserve. A refusal before the reserve — authentication,\na malformed body, the policy, `wallet_busy`, a bad `X-Answer-Within` —\nholds nothing, and the same key may be sent again.\n\nRecovery after a timeout or a dropped connection: re-send with the same\nkey and read `request_id` and `status` from whichever answer comes — the\nplain one, this duplicate, or `409 wallet_busy` with `in_flight_request_id`\n(`null` while the request is being written: retry in a moment). With no\nheader the server mints a fresh key per call, so nothing is deduplicated.\n"
+      },
+      "AnswerWithin": {
+        "name": "X-Answer-Within",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 80
+        },
+        "description": "How many seconds after the request arrives this call waits for the\noperation to settle before it answers `status: processing` with\n`request_id` and `poll_url` (`createPaymentCheck`: `status: creating`\nwith the check's `poll_url`). Whole seconds, `0` to `80`; `0` answers as\nsoon as the funds are handed over. Absent, the call waits its own\nbudget: up to 80 s, and the relay's 60 s on a same-chain transfer or\nwithdraw. The wait only shortens: the operation itself runs to its\noutcome and settles the request whatever the client waited. Two things\nit does not cut: the hand-over itself (one relay publish, up to 30 s),\nand in `batchCreatePaymentChecks` the hand-over of every check, which\nthe wait follows. A value outside the range is refused\n`400 bad_request` before anything runs, and reserves nothing. Set it a\nfew seconds below your client's timeout, so a slow settlement answers\nwith an id to poll instead of a dropped connection. The header is read\non every wallet route: it acts on the operations that wait (the ones\nthat list it), and is accepted and changes nothing elsewhere.\n"
       }
     },
     "responses": {

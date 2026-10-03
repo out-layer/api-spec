@@ -4,17 +4,31 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ## [Unreleased]
 
-## [0.1.0-alpha.3] — 2026-10-02
+## [0.1.0-alpha.3] — 2026-10-03
 
 ### Upgrading a client
 
 What an integration has to change for the entries below. Each point is safe
-against the current server and the previous one.
+against the current server and the previous one. Mainnet before this release
+ran the server of 2026-09-28, which predates 0.1.0-alpha.2 as well: an
+integration coming from it reads both sections, and the points below are the
+ones that change how a money call is made and followed.
 
-1. **Send `X-Idempotency-Key`**, not `Idempotency-Key`, on every write. The
-   server now reads both. Before, it ignored the second, and a retried write ran
-   again.
-2. **Read `status`, not the HTTP code.** A `200` can answer `processing`: the
+1. **Send `X-Idempotency-Key`**, not `Idempotency-Key`, on every write — one
+   key per operation, minted and persisted on your side before sending. The
+   server now reads both names. Before, it ignored the second, and a retried
+   write ran again.
+2. **Send `X-Answer-Within: <seconds>` below your client's timeout** on
+   `intentsWithdraw`, `intentsTransfer`, `intentsSwap`, `createLimitOrder`,
+   `createPaymentCheck`, `batchCreatePaymentChecks`, `claimPaymentCheck` and
+   `reclaimPaymentCheck`. The call then answers `status: processing` with
+   `request_id` and `poll_url` within that many seconds of the request's
+   arrival (`createPaymentCheck`: `creating` with the check's `poll_url`)
+   instead of outliving your timeout. `0` to `80`; absent, the call waits its
+   own budget as before (up to 80 s). The wait only shortens: the operation
+   runs to its outcome whatever you waited. Out of range → `400 bad_request`
+   before anything runs.
+3. **Read `status`, not the HTTP code.** A `200` can answer `processing`: the
    money was handed over and its outcome is not known yet. Do not retry it; that
    is how a payment is made twice. Poll `poll_url` (`GET
    /wallet/v1/requests/{request_id}`) until the status is terminal. This applies
@@ -23,14 +37,14 @@ against the current server and the previous one.
    `LimitOrderProcessing` answer) and every confidential op. It also applies to
    anything that credits a user, ships goods or releases funds on a call's
    success: do that on the terminal status.
-3. **Terminal request statuses:**
+4. **Terminal request statuses:**
    - `success`, or `completed` for a payment check leg;
    - `failed`. With `result.never_executed` or `result.never_submitted` set,
      nothing moved, and a retry with a NEW idempotency key is safe;
    - `refunded` (confidential);
    - `needs_review`: the outcome could not be established. Do not retry; see
      the request's `result.reason`.
-4. **Payment checks:**
+5. **Payment checks:**
    - **Create.** Keep `check_key` whatever `status` says. `creating` means the
      funding is unconfirmed: the check cannot be claimed or reclaimed until it
      reads `unclaimed` (poll `poll_url`). `failed` means it was never funded.
@@ -42,11 +56,26 @@ against the current server and the previous one.
      were not created.
    - **Status and list.** New check statuses: `creating`, `claiming`,
      `reclaiming`, `failed`.
-5. **Idempotency keys are spent by failed attempts too.** A write refused
-   before anything moved still holds its key, and resending the same key answers
-   `duplicate_idempotency_key` with that request. Retry a refused write under a
-   new key.
-6. **Webhooks.** A `request_completed` webhook can arrive after the call that
+6. **A key is held by the request that reserved it** — including one that
+   ended `failed` after the reserve (a short balance, a recipient that does not
+   exist). A refusal before the reserve — authentication, a malformed body, the
+   policy, `wallet_busy`, a bad `X-Answer-Within` — holds nothing, and the same
+   key may be sent again. Retry a `failed` with `never_executed` or
+   `never_submitted` under a NEW key; any other `failed`, or `needs_review`: do
+   not.
+7. **Recover after a timeout or a dropped connection by re-sending with the
+   same key.** The answer is HTTP `200` with `error: duplicate_idempotency_key`
+   and the request it belongs to: `request_id`, `type`, `status`, `created_at`,
+   and `result`, `updated_at`, `poll_url` (while not terminal) as the request
+   has them; `message` reads as before. For a payment-check create or batch,
+   `checks: [{check_id, check_key, status}]` — the checks that key made, each
+   with its key derived again (`null` when asked with another API key of the
+   wallet than the one that created it). Branch on `error` (the code is 200),
+   read `request_id` and `status`, poll `poll_url` while present. The re-send
+   may instead meet `409 wallet_busy` with `in_flight_request_id` (`null` while
+   the request is being written: retry in a moment), or the plain answer. Act —
+   credit, ship, release funds — on the terminal status only.
+8. **Webhooks.** A `request_completed` webhook can arrive after the call that
    started the request has answered.
 
 ### Fixed
@@ -96,6 +125,9 @@ against the current server and the previous one.
 
 ### Changed
 
+- The `X-Idempotency-Key` description states what holds a key: the request
+  that reserved it, including one that ended `failed` after the reserve; a
+  refusal before the reserve holds nothing.
 - **Payment checks, limit orders and confidential ops settle past their
   response.** Every transfer they hand over is recorded before it leaves and
   settled from the chain (checks, limit order funding) or the confidential
@@ -124,6 +156,23 @@ against the current server and the previous one.
 
 ### Added
 
+- **`X-Answer-Within: <seconds>`** on the money operations that wait
+  (`intentsWithdraw`, `intentsTransfer`, `intentsSwap`, `createLimitOrder`,
+  `createPaymentCheck`, `batchCreatePaymentChecks`, `claimPaymentCheck`,
+  `reclaimPaymentCheck`): how long the call waits before answering
+  `processing` with `request_id` and `poll_url` (`createPaymentCheck`:
+  `creating`). Whole seconds, `0` to `80`, counted from the request's arrival;
+  absent, the full wait as before. Read on every wallet route; acts on these.
+  Out of range → `400 bad_request` before anything runs.
+- **The `duplicate_idempotency_key` answer names its request.** Beside `error`
+  and `message` (unchanged), the body carries `request_id`, `type`, `status`,
+  `created_at`, and `result`, `updated_at` and `poll_url` (while not terminal)
+  as the request has them; for a payment-check create or batch, `checks` with
+  each check's `check_id`, `check_key` (`null` when the asking API key is not
+  the one that created it) and status. A batch's request is `processing` while
+  it runs and lists the checks reserved so far, `completed` once it answered.
+  If the keys cannot be derived again (the keystore does not answer) the
+  re-send is refused like any keystore call and can be sent again.
 - **Votes from contract wallets.** `approveRequest` and `rejectRequest` accept a
   second body, `ContractVoteAuth` `{account_id, authorization}`, from an
   approver without access keys: a NEP-616 wallet contract owned by an EVM key
