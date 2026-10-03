@@ -4,6 +4,54 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+### Upgrading a client
+
+1. **Stop storing the trial key.** `POST /trial-key` now issues a key derived
+   from the wallet's master, and `GET /wallet/v1/payment-key` answers the same
+   string again under the same credential. A key issued before this release
+   was random: the GET answers `409 payment_key_not_recoverable` for it, and
+   the client keeps the copy it has or creates a payment key.
+2. **A `Bearer near:` wallet claims the trial too.** `POST /trial-key` takes
+   any wallet credential; before, only `wk_`.
+
+### Added
+
+- `POST /wallet/v1/sponsorship {code}` (`redeemSponsorCode`) — redeem a sponsor
+  code: the code's allowance lands on the wallet's nonce-0 key for the code's
+  term, the key is created if absent, the trial converted. A key carries one
+  sponsor while its grant is live; after it ends another code is taken. Refusals:
+  `404 sponsor_code_invalid` (one answer for every reason),
+  `409 sponsor_cannot_top_up`, `409 payment_key_deleted`,
+  `409 payment_key_revoked`.
+- `GET /wallet/v1/payment-key` (`getPaymentKey`) — the nonce-0 key, derived
+  again: `{payment_key, owner, nonce, expires_at, subscription}`;
+  `404 no_payment_key`, `409 payment_key_not_recoverable`.
+- `TrialKeyResponse`, `PaymentKeyResponse`, `SponsorshipResponse` as named
+  schemas; `TrialKeyRefusal.reason` gains `no_payment_key`,
+  `payment_key_not_recoverable`, `sponsor_code_invalid`,
+  `sponsor_cannot_top_up`, `payment_key_deleted`.
+
+### Changed
+
+- The nonce-0 key is bound to the credential that claimed it: only that
+  credential reads it (`403 payment_key_other_credential`), and once that
+  `wk_` is revoked the key stops working on `/call` and the GET answers
+  `409 payment_key_revoked`.
+- `/call` to `hyperliquid` or `polymarket` from a wallet with an owner uses
+  the owner's policy row: attached when the body names none, refused for any
+  other account (`403 policy_row_not_owner`); repeating that answers
+  `403 calls_suspended` on those connectors for a while. With no policy in the
+  run, they trade on their built-in default.
+- `POST /trial-key`: `409 trial_already_claimed` points to
+  `GET /wallet/v1/payment-key`. A refused credential now answers in the wallet
+  API's shape (`ErrorResponse`), as on every `/wallet/v1/*` route, instead of
+  `TrialKeyRefusal` `unauthorized`.
+- A granted subscription — an operator's gift or a sponsor code — lifts the
+  free-tier custody ceiling (`operation_limit_reached` on `custody:*`) as a
+  bought one does. The bare trial is still under it.
+- The one-allowance-call-at-a-time rule (`429 call_already_in_flight`) counts
+  a sponsored key's in-flight calls against its code's `max_parallel`.
+
 ## [0.1.0-alpha.3] — 2026-10-03
 
 ### Upgrading a client
