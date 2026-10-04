@@ -2,7 +2,7 @@
 
 All notable changes to the OutLayer API spec. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/) — see [docs/versioning.md](docs/versioning.md).
 
-## [Unreleased]
+## [0.1.0-alpha.4] — 2026-10-04
 
 ### Upgrading a client
 

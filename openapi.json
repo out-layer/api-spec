@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "OutLayer API",
-    "version": "0.1.0-alpha.3",
+    "version": "0.1.0-alpha.4",
     "summary": "HTTP API for OutLayer custody wallets and policy enforcement",
     "description": "OutLayer Agent Custody — multi-chain wallets for AI agents with TEE-enforced\npolicy, multisig approvals, audit log, gasless cross-chain transfers via\nNEAR Intents, and off-chain EVM signing (EIP-712 typed data, EIP-191\npersonal_sign, and client-serialized raw transactions).\n\nPrivate keys live exclusively inside an Intel TDX TEE and are derived from\nNEAR MPC. The wallet owner sets policy (spending limits, whitelists,\nmultisig, freeze) — all enforced inside the TEE before signing.\n\nSee [CUSTODY docs](https://outlayer.ai/docs/agent-custody) for the\narchitectural overview and [@outlayer/sdk](https://www.npmjs.com/package/@outlayer/sdk)\nfor the TypeScript client.\n",
     "license": {
