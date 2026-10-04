@@ -4571,7 +4571,7 @@
             "$ref": "#/components/responses/InboxRefused"
           },
           "409": {
-            "description": "`task_closed` with `state`: the task is not `open`.",
+            "description": "`task_closed` with `state`: the task is not `open`. `task_ending`: the task ends in under five minutes, too soon for its run to take it — refused before the signature is spent; ask the agent to prepare it again.",
             "$ref": "#/components/responses/InboxRefused"
           },
           "503": {
@@ -5635,7 +5635,7 @@
             }
           },
           "409": {
-            "description": "`payment_key_not_recoverable` — the key was issued at random before keys were derived; it was shown once. `payment_key_revoked` — the `wk_` it was claimed with is revoked, and the key with it. Create a payment key instead.",
+            "description": "`payment_key_not_recoverable` — the key was issued at random before keys were derived; it was shown once. A sponsor code redeem that sends it as `X-Payment-Key` moves the slot to a derived key this route reads. `payment_key_revoked` — the `wk_` it was claimed with is revoked, and the key with it. Otherwise create a payment key.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5664,10 +5664,21 @@
         ],
         "operationId": "redeemSponsorCode",
         "summary": "Redeem a sponsor code — a subscription on this wallet's nonce-0 key, paid by the sponsor",
-        "description": "A sponsor code, `spn_…`, is a secret somebody gave you: a friend's\none-time link, a voucher posted in public, or the backend that runs you.\nRedeeming it puts the code's allowance on your wallet's nonce-0 key for\nthe code's term — the trial's key if you claimed one, a new key if not —\nand converts the trial: no call count from then on. The key then pays\nfor connector calls exactly as a bought subscription does.\n\nAny wallet credential: `Bearer wk_…` or `Bearer near:…`. The trial's\nclaim window does not apply; the code is the gate. A key carries one\nsponsor while its grant is live: the same code again, or another code\nbefore the grant ends, changes nothing and answers what the key holds.\nAfter the grant ends, another code is taken; the same code never is\nagain.\n\nA code that cannot be redeemed answers `404 sponsor_code_invalid`,\nwhatever the reason. Ask the person who gave it to you. Only the\ncredential that reads the wallet's nonce-0 key redeems onto it — the\nsame rule as `GET /wallet/v1/payment-key` — and a refused redeem takes\nno use of the code.\n",
+        "description": "A sponsor code, `spn_…`, is a secret somebody gave you: a friend's\none-time link, a voucher posted in public, or the backend that runs you.\nRedeeming it puts the code's allowance on your wallet's nonce-0 key for\nthe code's term — the trial's key if you claimed one, a new key if not —\nand converts the trial: no call count from then on. The key then pays\nfor connector calls exactly as a bought subscription does.\n\nAny wallet credential: `Bearer wk_…` or `Bearer near:…`. The trial's\nclaim window does not apply; the code is the gate. A key carries one\nsponsor while its grant is live: the same code again, or another code\nbefore the grant ends, changes nothing and answers what the key holds.\nAfter the grant ends, another code is taken. A code this wallet\nredeemed once is never taken again, and a code that is one per address\nis never taken again from an address it was redeemed from, whatever\nthe key carried in between.\n\nA code that cannot be redeemed answers `404 sponsor_code_invalid`,\nwhatever the reason. Ask the person who gave it to you. Only the\ncredential that reads the wallet's nonce-0 key redeems onto it — the\nsame rule as `GET /wallet/v1/payment-key` — with one exception: a key\nissued at random, before keys were derived, is bound to the caller\nfirst when the request sends that key as `X-Payment-Key`. Holding it\nis the proof; the slot moves to the derived key, which the answer\ncarries and `GET /wallet/v1/payment-key` reads from then on. A refused\nredeem takes no use of the code and changes no binding.\n\nA sponsor code's subscription pays for connector calls. It leaves the\nwallet under the free tier's custody limits unless the sponsor set\nthe code up to lift them.\n",
         "security": [
           {
             "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Payment-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The wallet's nonce-0 key, `{owner}:0:{key}`, when it was issued at random and cannot be read again — the proof that binds it to this credential. Not needed otherwise."
           }
         ],
         "requestBody": {
@@ -5731,7 +5742,7 @@
             }
           },
           "409": {
-            "description": "`sponsor_cannot_top_up` — the key can already spend more than this code gives; a sponsorship tops up and never takes away. `payment_key_deleted` — the wallet's nonce-0 key was deleted and the slot cannot be used again. `payment_key_revoked` — the `wk_` the key was claimed with is revoked, and the key with it. `payment_key_not_recoverable` — the wallet's nonce-0 key was drawn at random and cannot be read again.",
+            "description": "`sponsor_cannot_top_up` — the key can already spend more than this code gives; a sponsorship tops up and never takes away. `payment_key_deleted` — the wallet's nonce-0 key was deleted and the slot cannot be used again. `payment_key_not_recoverable` — the wallet's nonce-0 key was drawn at random and the request did not send it as `X-Payment-Key`. `payment_key_revoked` — the `wk_` the key was claimed with is revoked, and the key with it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6711,7 +6722,7 @@
           },
           "secrets_ref": {
             "type": "object",
-            "description": "The stored secret this run reads: the row `account_id` stored for\nthis project under `profile`, decrypted inside the TEE only if the\nrow's on-chain access condition admits the paying key's owner. On a\nconnector project a body reference is used as it is; without one,\n`X-Use-Owner-Secret` names the wallet's own row.\nOn a trading connector (`hyperliquid`, `polymarket`) of a wallet\nthat has an owner, the policy is the OWNER's: with no reference the\nowner's row `{owner, <connector>}` is attached, a row of the owner's\nis kept, and any other account's is refused with\n`403 policy_row_not_owner`; doing that repeatedly answers\n`403 calls_suspended` to the wallet's calls for a while.\nRefused with `invalid_secrets_ref` (400) when `account_id` is not a\nNEAR account id or `profile` is not 1–64 bytes or holds an ASCII\ncharacter other than a letter, digit, `-` or `_`: the contract\nstores no such row, so nothing is queued for it. A body whose\nfields are not strings is rejected as a body-shape error (422)\nbefore this check.\n",
+            "description": "The stored secret this run reads: the row `account_id` stored for\nthis project under `profile`, decrypted inside the TEE only if the\nrow's on-chain access condition admits the paying key's owner. On a\nconnector project a body reference is used as it is; without one,\n`X-Use-Owner-Secret` names the wallet's own row.\nOn a trading connector (`hyperliquid`, `polymarket`) of a wallet\nthat has an owner, the policy is the OWNER's: with no reference the\nowner's row `{owner, <connector>}` is attached, a row of the owner's\nis kept, and any other account's is refused with\n`403 policy_row_not_owner`; doing that repeatedly answers\n`403 calls_suspended` to the wallet's calls for a while\n(`terminal: false` — the same call succeeds once it ends). A row\nthe call names under a profile other than the connector's own that\nis not stored is refused in the run's result (`policy_row_missing`),\nnever run with no policy. A profile per wallet caps that wallet only\nwhile `{owner, <connector>}` exists too: a call that names no row\nruns that one, and with none stored, the connector's built-in\ndefault.\nRefused with `invalid_secrets_ref` (400) when `account_id` is not a\nNEAR account id or `profile` is not 1–64 bytes or holds an ASCII\ncharacter other than a letter, digit, `-` or `_`: the contract\nstores no such row, so nothing is queued for it. A body whose\nfields are not strings is rejected as a body-shape error (422)\nbefore this check.\n",
             "properties": {
               "profile": {
                 "type": "string"
@@ -6807,6 +6818,7 @@
               "invalid_statement",
               "task_not_found",
               "task_closed",
+              "task_ending",
               "invalid_request",
               "confirmation_required",
               "upstream_unavailable",
@@ -6942,7 +6954,7 @@
       },
       "TaskFailureReason": {
         "type": "string",
-        "description": "Why a task is `failed` before its run acted. `preparer_key_unavailable`: the payment key that prepared the task could not pay for the run (deleted, out of funds, spent, expiring, or no longer reaching the project). `operation_priced`: the answering operation has a price and must be free. `operation_unknown`: the connector sells no such operation. `operation_limit_reached`: a limit on the operation is reached. `wallet_unresolved`: the key's wallet or its bound identity is not the preparing run's. `queue_unavailable`: the platform could not start the run. `run_not_started`: the run did not take the task in time. `run_refused:<reason>`: the run was refused the task by the host with `<reason>` (`hash-mismatch`, `not-the-preparer`, `approval-invalid`, `expired`, `unavailable`, …) or ended without reporting (`unreported`). Absent when the run acted and ended any way. The agent prepares again on any of them.\n",
+        "description": "Why a task is `failed`. Before its run acted: `preparer_key_unavailable`: the payment key that prepared the task could not pay for the run (deleted, out of funds, spent, expiring, or no longer reaching the project). `operation_priced`: the answering operation has a price and must be free. `operation_unknown`: the connector sells no such operation. `operation_limit_reached`: a limit on the operation is reached. `wallet_unresolved`: the key's wallet or its bound identity is not the preparing run's. `build_changed`: the connector published a new build since the task was made; decided at the approval, before the owner's signature is spent, and nothing was charged. `queue_unavailable`: the platform could not start the run. `run_not_started`: the run did not take the task in time. `run_refused:<reason>`: the run was refused the task by the host with `<reason>` (`hash-mismatch`, `not-the-preparer`, `approval-invalid`, `expired`, `unavailable`, …) or ended without reporting (`unreported`); the agent prepares again on any of these — nothing was done. After the run took the task: `run_failed`: the project said it did not carry the task out, and `result` holds why; `run_trapped`: the project reported the task carried out and then the run failed, and `result` holds what it reported — the action most likely happened; `run_unreported`: the run ended without a word on the task, and it may have acted; `run_unfinished`: no word of the run's end in time, and it may have acted. On the last three the agent checks the service before it prepares again. Absent in every other state.\n",
         "pattern": "^[a-z_]+(:[a-z-]+)?$"
       },
       "InboxTaskMoved": {

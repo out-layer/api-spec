@@ -2,6 +2,51 @@
 
 All notable changes to the OutLayer API spec. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/) — see [docs/versioning.md](docs/versioning.md).
 
+## [Unreleased]
+
+### Changed
+
+- **A nonce-0 key issued at random before keys were derived redeems a sponsor
+  code** when the request sends it as `X-Payment-Key`; the slot moves to the
+  derived key, which `GET /wallet/v1/payment-key` reads from then on.
+- **A key carrying a live operator's gift takes no sponsor code;** the redeem
+  answers what the key holds.
+- **Approving a connector's task checks its build before the signature is
+  spent.** A changed build fails the task `build_changed` with the owner's
+  nonce unspent; a chain that does not answer is `503 upstream_unavailable`
+  and the task stays open.
+- **The preparer deletes a `failed` task only when its reason says nothing was
+  done** (`run_failed`, `run_not_started`, `run_refused:*`, a run never
+  started); any other reason, or none, is refused `closed`.
+- **A code a wallet redeemed once is never taken again by it,** and a
+  one-per-address code never again from an address it was redeemed from —
+  also after the key carried another code in between.
+- **A sponsor code's subscription leaves the wallet under the free tier's
+  custody limits** unless the sponsor set the code up to lift them.
+
+- **A trading connector call that names a row under a profile other than the
+  connector's own, and not stored, is refused** (`policy_row_missing`, in the
+  run's result), never run with no policy: it used to run the connector with
+  no caps. A profile per wallet caps that wallet only while the owner's
+  `{owner, <connector>}` row exists too. Naming another account's row
+  repeatedly blocks the wallet for a while, and `calls_suspended` now says
+  `terminal: false`.
+- **Approving a task in its last five minutes is refused** with `409
+  task_ending`, before the signature is spent: the run it starts could not
+  take the task in time.
+- **`build_changed`** is a new `failure_reason`: the connector published a new
+  build after the task was made. Prepare the task again.
+
+- **`failure_reason` names what happened after the run took a task.**
+  `run_failed` — the project said it did not carry the task out, and the
+  task's `result` holds why; `run_trapped` — the project reported it carried
+  out and then the run failed, `result` holding the report; `run_unreported` —
+  the run ended without a word on the task, and it may have acted;
+  `run_unfinished` — no word of the run's end in time, and it may have acted.
+  Before, these tasks were `failed` with no reason, and the description told
+  the agent to prepare again on any `failed` — on the last three, check the
+  service first.
+
 ## [0.1.0-alpha.4] — 2026-10-04
 
 ### Upgrading a client
