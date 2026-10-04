@@ -5664,7 +5664,7 @@
         ],
         "operationId": "redeemSponsorCode",
         "summary": "Redeem a sponsor code — a subscription on this wallet's nonce-0 key, paid by the sponsor",
-        "description": "A sponsor code, `spn_…`, is a secret somebody gave you: a friend's\none-time link, a voucher posted in public, or the backend that runs you.\nRedeeming it puts the code's allowance on your wallet's nonce-0 key for\nthe code's term — the trial's key if you claimed one, a new key if not —\nand converts the trial: no call count from then on. The key then pays\nfor connector calls exactly as a bought subscription does.\n\nAny wallet credential: `Bearer wk_…` or `Bearer near:…`. The trial's\nclaim window does not apply; the code is the gate. A key carries one\nsponsor while its grant is live: the same code again, or another code\nbefore the grant ends, changes nothing and answers what the key holds.\nAfter the grant ends, another code is taken; the same code never is\nagain.\n\nA code that cannot be redeemed answers `404 sponsor_code_invalid`,\nwhatever the reason. Ask the person who gave it to you. The key string\ncomes back only to the credential the key is bound to; another\ncredential of the wallet redeems the grant without seeing the key.\n",
+        "description": "A sponsor code, `spn_…`, is a secret somebody gave you: a friend's\none-time link, a voucher posted in public, or the backend that runs you.\nRedeeming it puts the code's allowance on your wallet's nonce-0 key for\nthe code's term — the trial's key if you claimed one, a new key if not —\nand converts the trial: no call count from then on. The key then pays\nfor connector calls exactly as a bought subscription does.\n\nAny wallet credential: `Bearer wk_…` or `Bearer near:…`. The trial's\nclaim window does not apply; the code is the gate. A key carries one\nsponsor while its grant is live: the same code again, or another code\nbefore the grant ends, changes nothing and answers what the key holds.\nAfter the grant ends, another code is taken; the same code never is\nagain.\n\nA code that cannot be redeemed answers `404 sponsor_code_invalid`,\nwhatever the reason. Ask the person who gave it to you. Only the\ncredential that reads the wallet's nonce-0 key redeems onto it — the\nsame rule as `GET /wallet/v1/payment-key` — and a refused redeem takes\nno use of the code.\n",
         "security": [
           {
             "BearerAuth": []
@@ -5710,6 +5710,16 @@
               }
             }
           },
+          "403": {
+            "description": "`payment_key_other_credential` — the wallet's nonce-0 key was claimed with another of its credentials; redeem with that one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialKeyRefusal"
+                }
+              }
+            }
+          },
           "404": {
             "description": "`sponsor_code_invalid` — the code cannot be redeemed by this wallet now. Terminal; nothing more is said.",
             "content": {
@@ -5721,7 +5731,7 @@
             }
           },
           "409": {
-            "description": "`sponsor_cannot_top_up` — the key can already spend more than this code gives; a sponsorship tops up and never takes away. `payment_key_deleted` — the wallet's nonce-0 key was deleted and the slot cannot be used again. `payment_key_revoked` — the `wk_` the key was claimed with is revoked, and the key with it.",
+            "description": "`sponsor_cannot_top_up` — the key can already spend more than this code gives; a sponsorship tops up and never takes away. `payment_key_deleted` — the wallet's nonce-0 key was deleted and the slot cannot be used again. `payment_key_revoked` — the `wk_` the key was claimed with is revoked, and the key with it. `payment_key_not_recoverable` — the wallet's nonce-0 key was drawn at random and cannot be read again.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7283,6 +7293,7 @@
       "SponsorshipResponse": {
         "type": "object",
         "required": [
+          "payment_key",
           "owner",
           "nonce",
           "allowance_usd",
@@ -7292,7 +7303,7 @@
         "properties": {
           "payment_key": {
             "type": "string",
-            "description": "The whole `X-Payment-Key` header value. Absent when this credential is not the one the key is bound to, or for a key drawn at random rather than derived."
+            "description": "The whole `X-Payment-Key` header value."
           },
           "owner": {
             "type": "string"

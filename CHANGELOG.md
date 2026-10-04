@@ -19,13 +19,17 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 - `POST /wallet/v1/sponsorship {code}` (`redeemSponsorCode`) — redeem a sponsor
   code: the code's allowance lands on the wallet's nonce-0 key for the code's
   term, the key is created if absent, the trial converted. A key carries one
-  sponsor while its grant is live; after it ends another code is taken. Refusals:
-  `404 sponsor_code_invalid` (one answer for every reason),
+  sponsor while its grant is live; after it ends another code is taken. Only the
+  credential that reads the nonce-0 key redeems onto it, and the answer always
+  carries `payment_key`. Refusals: `404 sponsor_code_invalid` (one answer for
+  every reason), `403 payment_key_other_credential`,
   `409 sponsor_cannot_top_up`, `409 payment_key_deleted`,
-  `409 payment_key_revoked`.
+  `409 payment_key_revoked`, `409 payment_key_not_recoverable`; none takes a use
+  of the code.
 - `GET /wallet/v1/payment-key` (`getPaymentKey`) — the nonce-0 key, derived
   again: `{payment_key, owner, nonce, expires_at, subscription}`;
-  `404 no_payment_key`, `409 payment_key_not_recoverable`.
+  `404 no_payment_key`, `403 payment_key_other_credential`,
+  `409 payment_key_revoked`, `409 payment_key_not_recoverable`.
 - `TrialKeyResponse`, `PaymentKeyResponse`, `SponsorshipResponse` as named
   schemas; `TrialKeyRefusal.reason` gains `no_payment_key`,
   `payment_key_not_recoverable`, `sponsor_code_invalid`,
