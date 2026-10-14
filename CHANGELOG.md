@@ -4,7 +4,42 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+### Added
+
+- **Three error codes on the withdraw, swap and quote routes**, so a refusal
+  routes without reading prose: `no_liquidity` (400, 1Click found no route with
+  liquidity for the amount), `upstream_rejected` (400, 1Click refused on grounds
+  of its own; `message` is its text verbatim) and `route_unavailable` (503 +
+  `Retry-After`, 1Click did not answer — nothing is known about the route).
+- **`operation_limit_reached` on the wallet routes** (429 + `Retry-After`,
+  `OperationLimitReachedResponse`): a reached custody ceiling says the ceiling,
+  its window, the operation and when the counter clears, as `/call` does.
+- **`listPendingApprovals` has a description**: the wallet's own key lists what
+  waits on its wallet.
+
 ### Changed
+
+- **Withdraw chains are the 1Click catalog's**, not a fixed list:
+  `WithdrawChain` is a string — any chain `GET /wallet/v1/tokens` lists, by
+  1Click's id or its long name — on the public and the confidential withdraw,
+  their dry-runs and the cross-chain deposits alike. A chain the catalog does
+  not list is `400 unsupported_chain`, naming what it does. The address on a
+  chain the wallet derives no key on is judged by 1Click at the quote.
+- **`1cs_v1:` ids** are accepted: as a destination (`token_out`, a withdraw's
+  delivery) sent to 1Click as given; as a source only in the NEAR-side form
+  `1cs_v1:near:nep141:…`, which names the same balance as `nep141:…`. A
+  `1cs_v1:` id on another chain given as a source is `unsupported_token`.
+- **HOT bridge assets** (`nep245:v2_1.omni.hot.tg:<chainId>_…`) are accepted on
+  the confidential withdraw and the cross-chain deposits; their chain is read
+  from the catalog.
+- **A dry-run's `reason`** for a bridge refusal is the code the real withdraw
+  answers with (`no_liquidity`, `upstream_rejected`, `unsupported_token`); a
+  1Click that did not answer is `503 route_unavailable`, not a route that
+  fails. `bridge_rejected` is gone.
+- **The free tier's custody ceiling is 100 `custody:*` operations per wallet
+  per day** (dry-runs included, swap quotes not); a subscription lifts it.
+- **`getApprovalDetail`** says the wallet's own key lists its pending approvals
+  (`GET /wallet/v1/pending_approvals`); the owner's session lists them by pubkey.
 
 - **A nonce-0 key issued at random before keys were derived redeems a sponsor
   code** when the request sends it as `X-Payment-Key`; the slot moves to the
