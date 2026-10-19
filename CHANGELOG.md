@@ -19,6 +19,10 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Changed
 
+- **A synchronous `/call` the API restarts during answers `pending`** with
+  `poll_url` (200), as an `async` call does, instead of the connection
+  dropping. The call was not resent and is still running; `GET poll_url` until
+  it is `completed` or `failed`. Sending it again runs and charges it twice.
 - **Withdraw chains are the 1Click catalog's**, not a fixed list:
   `WithdrawChain` is a string — any chain `GET /wallet/v1/tokens` lists, by
   1Click's id or its long name — on the public and the confidential withdraw,
