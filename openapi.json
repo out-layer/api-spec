@@ -1474,6 +1474,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "429": {
+            "$ref": "#/components/responses/OperationLimitReached"
+          },
           "500": {
             "$ref": "#/components/responses/InternalError"
           },
@@ -1517,6 +1520,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/OperationLimitReached"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
@@ -1562,6 +1568,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "429": {
+            "$ref": "#/components/responses/OperationLimitReached"
+          },
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
@@ -1605,6 +1614,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/OperationLimitReached"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
@@ -1650,6 +1662,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "429": {
+            "$ref": "#/components/responses/OperationLimitReached"
+          },
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
@@ -1693,6 +1708,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/OperationLimitReached"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
@@ -2146,6 +2164,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/OperationLimitReached"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -3313,6 +3334,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/OperationLimitReached"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
@@ -6706,7 +6730,7 @@
         }
       },
       "OperationLimitReached": {
-        "description": "The wallet's counted ceiling on this custody operation is reached (`operation_limit_reached`): the free tier allows 100 `custody:*` operations per wallet per day, dry-runs included, swap quotes not. The body says the ceiling, its window and when the counter clears; `Retry-After` carries the same seconds when they are known. Wait it out, or lift the ceiling with a subscription on the wallet's own key.",
+        "description": "The wallet's counted ceiling on this custody operation is reached (`operation_limit_reached`): the free tier allows 1000 `custody:*` operations per wallet per rolling 24 h, dry-runs, swap quotes and NEP-413/EVM/Solana signing included; reads are not counted. The body says the ceiling, its window and when the counter clears; `Retry-After` carries the same seconds when they are known. Wait it out, or lift the ceiling with a subscription on the wallet's own key.",
         "headers": {
           "Retry-After": {
             "description": "Seconds until the counter that refused this clears. Absent when unknown.",
@@ -8158,7 +8182,7 @@
           "operation",
           "terminal"
         ],
-        "description": "A `429` meaning the wallet's counted ceiling on this custody operation is reached. `message` reads \"limit reached: 100 per day for custody:*\"; the fields carry the same facts for a program. `terminal` is false: this clears by waiting (`retry_after_seconds`, also sent as `Retry-After`, null when the counter's remaining life could not be read) or by a subscription on the wallet's own key.",
+        "description": "A `429` meaning the wallet's counted ceiling on this custody operation is reached. `message` reads \"limit reached: 1000 per day for custody:*\"; the fields carry the same facts for a program. `terminal` is false: this clears by waiting (`retry_after_seconds`, also sent as `Retry-After`, null when the counter's remaining life could not be read) or by a subscription on the wallet's own key.",
         "properties": {
           "error": {
             "type": "string",

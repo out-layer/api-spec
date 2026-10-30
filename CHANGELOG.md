@@ -14,6 +14,8 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 - **`operation_limit_reached` on the wallet routes** (429 + `Retry-After`,
   `OperationLimitReachedResponse`): a reached custody ceiling says the ceiling,
   its window, the operation and when the counter clears, as `/call` does.
+  The swap quotes, NEP-413 `/sign-message` and the EVM and Solana signing
+  routes count against the same ceiling.
 - **`listPendingApprovals` has a description**: the wallet's own key lists what
   waits on its wallet.
 
