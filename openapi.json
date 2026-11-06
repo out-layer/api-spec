@@ -2653,7 +2653,7 @@
         ],
         "operationId": "createLimitOrder",
         "summary": "Rest a limit order at a price you set",
-        "description": "Rests a swap on 1Click at `price` or better, funded from the wallet's\nintents balance. The order waits until it fills (partially or fully),\nis cancelled, or reaches its `deadline` (7 days unless you set one).\nFilled output goes to `recipient` — this wallet's own intents balance\nwhen omitted; the unfilled remainder always comes back to this wallet.\nMAINNET only.\n\nThis endpoint is a thin door onto 1Click's `/v0/orders`. The request\ncarries 1Click's own order parameters and the answer is 1Click's own\norder, in this API's conventions: **field names in snake_case,\nenumerated values in lower case, nothing renamed or merged**\n(`fillStatus: \"PENDING_CANCEL\"` arrives as\n`fill_status: \"pending_cancel\"`). A value 1Click adds later passes\nthrough as itself.\n\n**What makes this different from every other exit.** The wallet\nauthorises the order ONCE, here. The payout happens later — possibly\ndays later — with no further signature from the wallet. Two\nconsequences an owner should know before enabling it:\n\n* **A price through the market fills at once.** A limit order is not a\n  gentler thing than a withdrawal; at a bad enough price it is one. It\n  is therefore gated like one — see below.\n* **A freeze does not cancel resting orders.** Freezing a wallet takes\n  away the ability to place NEW orders (and to do anything else the\n  policy gates); orders already resting stay, and keep filling and\n  paying out on the terms they were authorised under. Cancelling is\n  never frozen, and a freeze does not revoke API keys: the same key\n  that placed the orders calls `cancel-all` (or cancels order by\n  order) to clear them. Cancelling is asynchronous, and the upstream\n  allows a last slice to fill after a cancel is accepted.\n\n**Security model.** Gated by the default-DENY `limit_order` capability\nAND the `limit_order` transaction type, plus the address rules on\n`recipient` and the per-token amount limit on what the wallet sends — the same\ngates as `cross_chain_withdraw`, which neither stands in for it nor is\nimplied by it. The address rules apply to the default recipient too:\nunder a `whitelist`, an order paying out to this wallet's own intents\naccount needs that account on the list. On a multisig wallet the call answers\n`pending_approval`: approvers sign over the order's terms (input token\nand amount, output token and minimum), and the order is created only\nafter the threshold.\n\n**Amounts.** `quantity` is in the base asset's smallest units. `price`\nis quote per one WHOLE base, a plain decimal string. The wallet sends\nthe base on a `sell` and the quote on a `buy`; the terms are computed\nby this service before the order exists, and the upstream's own figures\nmust be no worse or the order is cancelled unfunded. Minimum order\nvalue is 0.1 USD (the upstream's).\n\n**Fees.** 1Click applies its own app fee to the input (reported back as\n`app_fees`, in basis points). It is not set by this service.\n\n**Balance.** The wallet's intents balance of the asset it sends is\nchecked before anything is created at 1Click: short of the order's\ninput, the call answers `insufficient_balance` with both figures.\n\n**The answer** is the order as 1Click described it when it was created\n— `fill_status: awaiting_deposit`, `deposited_amount: \"0\"` — together\nwith `transfer_intent_hash`, the transfer that funds it. 1Click picks\nthe deposit up within seconds; read the order to see it `open`.\n\n**Idempotency** is the rest of this API's: a key seen before is not\nexecuted again and answers `duplicate_idempotency_key`, naming the\n`request_id` it belongs to.\n",
+        "description": "Rests a swap on 1Click at `price` or better, funded from one of the\nwallet's own balances: its public intents balance (`deposit_type:\nintents`, the default) or its confidential balance (`deposit_type:\nconfidential_intents`). The order waits until it fills (partially or\nfully), is cancelled, or reaches its `deadline` (7 days unless you set\none). Filled output goes to `recipient` — this wallet's own account\nwhen omitted; the unfilled remainder always comes back to this wallet,\non the balance the order was funded from. MAINNET only.\n\n**Funding from the confidential balance** is one mode, taken whole: the\norder is funded from the confidential balance, pays out to the\nconfidential balance (`recipient_type` is `confidential_intents` or\nomitted; `intents` or `destination_chain` with it is `400\nbad_request` — mixed routing is not offered) and refunds there. Such\nan order needs the `confidential` capability as well as `limit_order`,\nand the deployment's confidential upstream (`503` otherwise). It is\nfunded through 1Click's own funding intent, which this service holds\nto the authorised transfer before the wallet signs it.\n\nThis endpoint is a thin door onto 1Click's `/v0/orders`. The request\ncarries 1Click's own order parameters and the answer is 1Click's own\norder, in this API's conventions: **field names in snake_case,\nenumerated values in lower case, nothing renamed or merged**\n(`fillStatus: \"PENDING_CANCEL\"` arrives as\n`fill_status: \"pending_cancel\"`). A value 1Click adds later passes\nthrough as itself.\n\n**What makes this different from every other exit.** The wallet\nauthorises the order ONCE, here. The payout happens later — possibly\ndays later — with no further signature from the wallet. Two\nconsequences an owner should know before enabling it:\n\n* **A price through the market fills at once.** A limit order is not a\n  gentler thing than a withdrawal; at a bad enough price it is one. It\n  is therefore gated like one — see below.\n* **A freeze does not cancel resting orders.** Freezing a wallet takes\n  away the ability to place NEW orders (and to do anything else the\n  policy gates); orders already resting stay, and keep filling and\n  paying out on the terms they were authorised under. Cancelling is\n  never frozen, and a freeze does not revoke API keys: the same key\n  that placed the orders calls `cancel-all` (or cancels order by\n  order) to clear them. Cancelling is asynchronous, and the upstream\n  allows a last slice to fill after a cancel is accepted.\n\n**Security model.** Gated by the default-DENY `limit_order` capability\nAND the `limit_order` transaction type, plus the address rules on\n`recipient` and the per-token amount limit on what the wallet sends — the same\ngates as `cross_chain_withdraw`, which neither stands in for it nor is\nimplied by it. The address rules apply to the default recipient too:\nunder a `whitelist`, an order paying out to this wallet's own intents\naccount needs that account on the list. On a multisig wallet the call answers\n`pending_approval`: approvers sign over the order's terms (input token\nand amount, output token and minimum), and the order is created only\nafter the threshold.\n\n**Amounts.** `quantity` is in the base asset's smallest units. `price`\nis quote per one WHOLE base, a plain decimal string. The wallet sends\nthe base on a `sell` and the quote on a `buy`; the terms are computed\nby this service before the order exists, and the upstream's own figures\nmust be no worse or the order is cancelled unfunded. Minimum order\nvalue is 0.1 USD (the upstream's).\n\n**Fees.** 1Click applies its own app fee to the input (reported back as\n`app_fees`, in basis points). It is not set by this service.\n\n**Balance.** The wallet's balance of the asset it sends — the one\n`deposit_type` names — is checked before anything is created at\n1Click: short of the order's input, the call answers\n`insufficient_balance` with both figures.\n\n**The answer** is the order as 1Click described it when it was created\n— `fill_status: awaiting_deposit`, `deposited_amount: \"0\"` — together\nwith `transfer_intent_hash`, the intent that funds it. 1Click picks\nthe deposit up within seconds; read the order to see it `open`.\n\n**Idempotency** is the rest of this API's: a key seen before is not\nexecuted again and answers `duplicate_idempotency_key`, naming the\n`request_id` it belongs to.\n",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -9411,7 +9411,7 @@
       },
       "LimitOrderCreateRequest": {
         "type": "object",
-        "description": "1Click's own order parameters, less the ones that are not the caller's to choose: the order is always funded from, and refunded to, this wallet's intents balance.",
+        "description": "1Click's own order parameters, less the ones that are not the caller's to choose: the order is funded from one of this wallet's own balances (`deposit_type`) and refunded to that same balance.",
         "required": [
           "base_asset",
           "quote_asset",
@@ -9460,7 +9460,16 @@
               "destination_chain"
             ],
             "default": "intents",
-            "description": "1Click's `recipientType`, lower-cased. `intents` — `recipient` is a NEAR account credited inside NEAR Intents. `confidential_intents` — the same, on the confidential shard, and the policy must then permit the `confidential` capability as well as `limit_order`. `destination_chain` — `recipient` is an address on the output asset's own chain, and is then required. Part of the terms approvers sign."
+            "description": "1Click's `recipientType`, lower-cased. `intents` — `recipient` is a NEAR account credited inside NEAR Intents. `confidential_intents` — the same, on the confidential shard, and the policy must then permit the `confidential` capability as well as `limit_order`. `destination_chain` — `recipient` is an address on the output asset's own chain, and is then required. Part of the terms approvers sign. With `deposit_type: confidential_intents` only `confidential_intents` (or omitting it) is accepted."
+          },
+          "deposit_type": {
+            "type": "string",
+            "enum": [
+              "intents",
+              "confidential_intents"
+            ],
+            "default": "intents",
+            "description": "Which of this wallet's balances funds the order — and is refunded the unfilled remainder. `intents`: the public intents balance. `confidential_intents`: the confidential balance; the order then pays out to the confidential balance too (`recipient_type` must be `confidential_intents` or omitted — anything else is `400`, mixed routing is not offered), needs the `confidential` capability as well as `limit_order`, and is reachable only where confidential intents are configured (`503` otherwise)."
           },
           "deadline": {
             "type": "string",
@@ -9507,7 +9516,7 @@
           },
           "deposit_type": {
             "type": "string",
-            "description": "Always `intents` — orders here are funded from the intents balance."
+            "description": "Which of the wallet's balances funded the order: `intents` (the public intents balance) or `confidential_intents` (the confidential balance)."
           },
           "fill_status": {
             "type": "string",
@@ -9615,10 +9624,11 @@
           },
           "refund_to": {
             "type": "string",
-            "description": "Always this wallet's own intents account."
+            "description": "Always this wallet's own account."
           },
           "refund_type": {
-            "type": "string"
+            "type": "string",
+            "description": "Always the balance the order was funded from — the same value as `deposit_type`: the unfilled remainder comes back where the input came from."
           },
           "estimated_withdraw_fee": {
             "type": "string"
@@ -9714,7 +9724,7 @@
           "order_id",
           "poll_url"
         ],
-        "description": "The order exists and its funding transfer was handed to the relay, but was not confirmed in time (or the call failed after handing it over). Not an error, and not to be retried: the transfer may land. The request settles from the chain — `success` once the transfer executed, or `failed` with `never_executed: true` once its deadline passed unused, and only then is the order cancelled.",
+        "description": "The order exists and its funding was handed over, but was not confirmed in time (or the call failed after handing it over). Not an error, and not to be retried: the funding may land. The request settles on its own — from the chain for an order funded from the public intents balance, from the order itself (the deposit 1Click reports) for one funded from the confidential balance: `success` once the funding executed, or `failed` with `never_executed: true` once its deadline passed unused, and only then is the order cancelled.",
         "properties": {
           "request_id": {
             "type": "string"

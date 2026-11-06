@@ -6,6 +6,20 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Added
 
+- **A limit order funded from the confidential balance**:
+  `createLimitOrder` takes `deposit_type` (`intents`, the default, or
+  `confidential_intents`). With `confidential_intents` the order is funded
+  from the wallet's confidential balance, pays out to the confidential
+  balance (`recipient_type` must be `confidential_intents` or omitted;
+  `intents` / `destination_chain` with it is `400 bad_request` — mixed routing
+  is not offered) and refunds its unfilled remainder there; it needs the
+  `confidential` capability as well as `limit_order`, and answers `503` where
+  confidential intents are not configured. `LimitOrder.deposit_type` and
+  `refund_type` read `intents` or `confidential_intents` — always the same
+  value, the balance the order was funded from. A `LimitOrderProcessing`
+  answer for such an order settles from the order itself (the deposit 1Click
+  reports), not from the chain.
+
 - **Three error codes on the withdraw, swap and quote routes**, so a refusal
   routes without reading prose: `no_liquidity` (400, 1Click found no route with
   liquidity for the amount), `upstream_rejected` (400, 1Click refused on grounds
