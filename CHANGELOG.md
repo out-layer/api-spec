@@ -21,6 +21,21 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Changed
 
+- **A payment check is held to the wallet's approval threshold** like every
+  other operation that moves money (`approval.threshold`,
+  `approval.excluded_types`, `capabilities.payment_check.requires_approval`).
+  `createPaymentCheck` on such a wallet answers `status=pending_approval` with
+  `approval_id`, `required`, `approved`, `request_hash` and `poll_url`; the
+  `check_key` is returned at once and the account holds nothing until the
+  threshold, after which the coordinator funds the check (`unclaimed`). A veto,
+  an approval that expires unmet, or the check's own `expires_at` passing
+  while it waits ends it `failed`; a claim or reclaim of a
+  check still `pending_approval` is `400 bad_request`. `PaymentCheckStatusResponse`
+  gains the `pending_approval` state. `batchCreatePaymentChecks` on a wallet
+  that requires approval is `403 policy_denied` and creates nothing.
+- **A payment check's create counts as one `custody:payment_check` operation**
+  (429 `operation_limit_reached` on `createPaymentCheck` and, per check,
+  `batchCreatePaymentChecks`); a claim or reclaim is not counted.
 - **A synchronous `/call` the API restarts during answers `pending`** with
   `poll_url` (200), as an `async` call does, instead of the connection
   dropping. The call was not resent and is still running; `GET poll_url` until
