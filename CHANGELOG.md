@@ -6,6 +6,29 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Added
 
+- **A locked policy** (`approval.locked`): the policy is changed only with
+  its approvers' quorum. While it is set, `signPolicy` answers
+  `PolicyUpdatePending` (`status: pending_approval`, a `policy_update`
+  approval the approvers vote on — `request_data.policy` is the new policy —
+  and a `request_id`); once the threshold is met the signature is on
+  `getRequest` (`result_data.wallet_signature`, `version`, `locked`,
+  `encrypted_data`), and the owner sends `store_wallet_policy` with it. The
+  owner alone can set the lock (a tightening) and cannot clear it; a delete
+  is refused on chain while it is set; freezing stays the owner's.
+  `encryptPolicy` and the keystore accept the lock only with a reachable
+  quorum (`400 invalid_request` otherwise), and `encryptPolicy` answers
+  `policy_hash`, the sha256 of the canonical plaintext the votes bind.
+- **Policy versions and deadlines**: `signPolicy`'s `SignedPolicy` carries
+  `version` (the chain's plus one), `locked` and `valid_until` (seven days
+  from signing), all inside the signature; `store_wallet_policy` takes all
+  three, a signature is good for one write and not after its deadline.
+  `getPolicy` answers `version` and `locked`.
+
+### Removed
+
+- `EncryptPolicyRequest.admin_quorum` and `AdminQuorum`: never enforced;
+  `approval.locked` is the mechanism.
+
 - **A limit order funded from the confidential balance**:
   `createLimitOrder` takes `deposit_type` (`intents`, the default, or
   `confidential_intents`). With `confidential_intents` the order is funded

@@ -3535,7 +3535,7 @@
         ],
         "operationId": "getPolicy",
         "summary": "Get current decrypted policy",
-        "description": "Returns the wallet's current policy (decrypted by the keystore TEE),\nplus the current usage counters used by velocity-limit checks.\n\n`policy` states whether a policy exists at all: `none` — no policy is\nstored and every operation is allowed; `stored` — the `rules`,\n`approval`, `capabilities` and `authorized_key_hashes` fields are the\npolicy as written. A response without `policy` could not read the\nchain; it says nothing about the policy rather than guessing.\n",
+        "description": "Returns the wallet's current policy (decrypted by the keystore TEE),\nplus the current usage counters used by velocity-limit checks.\n\n`policy` states whether a policy exists at all: `none` — no policy is\nstored and every operation is allowed; `stored` — the `rules`,\n`approval`, `capabilities` and `authorized_key_hashes` fields are the\npolicy as written. A response without `policy` could not read the\nchain; it says nothing about the policy rather than guessing.\n\n`version` and `locked` are the policy's state on chain: the version\nthe next `store_wallet_policy` must exceed by one, and whether that\nwrite (and a delete) needs the approvers' quorum. Both absent when the\nchain could not be read.\n",
         "responses": {
           "200": {
             "description": "Current policy + usage",
@@ -3563,7 +3563,7 @@
         ],
         "operationId": "encryptPolicy",
         "summary": "Encrypt a policy for on-chain storage",
-        "description": "Sends a policy JSON to the keystore TEE for encryption. The returned\n`encrypted_base64` is what gets stored in NEAR via\n`store_wallet_policy(...)` after the keystore signs it.\n",
+        "description": "Sends a policy JSON to the keystore TEE for encryption. The returned\n`encrypted_base64` is what gets stored in NEAR via\n`store_wallet_policy(...)` after the keystore signs it; `policy_hash`\nis the sha256 of the canonical plaintext that was encrypted — what a\nlocked policy's approvers vote on.\n\n`approval.locked: true` is accepted only with a reachable quorum —\n`threshold` of at least 1 and at least that many approvers with an\n`id` — and is otherwise `400 invalid_request`: a lock nobody could\nlift is never stored.\n",
         "requestBody": {
           "required": true,
           "content": {
@@ -3604,7 +3604,7 @@
         ],
         "operationId": "signPolicy",
         "summary": "Sign an encrypted policy (for on-chain submission)",
-        "description": "The keystore signs the message the contract rebuilds —\n`store_wallet_policy:v1:{wallet_pubkey}:{len}:{encrypted_data}:{caller}` —\nwith the wallet's key. The signature + encrypted data + public key form\nthe payload for the on-chain `store_wallet_policy(...)` call.\n\n`caller` is the account that will SEND that call, and it is signed: the\nanswer works for that account and no other. Sending the prepared payload\nfrom anywhere else is refused on chain.\n",
+        "description": "The keystore signs the message the contract rebuilds —\n`store_wallet_policy:v2:{wallet_pubkey}:{version}:{locked}:{valid_until}:{len}:{encrypted_data}:{caller}` —\nwith the wallet's key. The signature, the encrypted data, the public\nkey, and the `version`, `locked` and `valid_until` the answer carries\nform the payload for the on-chain `store_wallet_policy(...)` call:\npass all three exactly as answered, they are inside the signature.\n`valid_until` is seven days from signing; the contract refuses the\nsignature after it.\n\n`caller` is the account that will SEND that call, and it is signed: the\nanswer works for that account and no other. Sending the prepared payload\nfrom anywhere else is refused on chain. `version` is the chain's plus\none, so the answer is good for exactly one write.\n\n**A locked policy.** When the policy on chain carries\n`approval.locked`, the keystore signs only with that policy's\napprovers' quorum. This call then answers `status: pending_approval`\nwith the `approval_id` the approvers vote on (`approve` /\n`reject`, as for any pending operation; `request_data.policy` is the\nnew policy they are approving) and a `request_id`. Once the threshold\nis met the signature is on `GET /wallet/v1/requests/{request_id}`\n(`status: success`, `result_data.wallet_signature`, `version`,\n`locked`, `valid_until`, `encrypted_data`); the owner sends\n`store_wallet_policy` with it, within `valid_until`. A vote the keystore does not count, or a policy that moved\non under the approval, fails the request with the keystore's words.\nThe first policy of a wallet, and any write over an unlocked policy,\nis signed at once.\n",
         "requestBody": {
           "required": true,
           "content": {
@@ -3617,7 +3617,7 @@
         },
         "responses": {
           "200": {
-            "description": "Signature",
+            "description": "The signature, or the approval the write waits on.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7892,7 +7892,7 @@
       },
       "RequestType": {
         "type": "string",
-        "description": "Tracked async request / policy transaction type. `withdraw` is a\nsame-chain intents withdrawal; `cross_chain_withdraw` is a separate type\nfor 1Click bridge-out (a policy must list it explicitly — it is NOT\nfolded into `withdraw`). `confidential` covers every confidential-shard\nop (shield / unshield / withdraw / transfer / swap). The deposit family\n(`intents/deposit`, `storage-deposit`, cross-chain deposit) all gate as\n`call`. `limit_order` is a rested 1Click order and, like\n`cross_chain_withdraw`, its own type: permitting swaps or cross-chain\nexits does not permit it.\n",
+        "description": "Tracked async request / policy transaction type. `withdraw` is a\nsame-chain intents withdrawal; `cross_chain_withdraw` is a separate type\nfor 1Click bridge-out (a policy must list it explicitly — it is NOT\nfolded into `withdraw`). `confidential` covers every confidential-shard\nop (shield / unshield / withdraw / transfer / swap). The deposit family\n(`intents/deposit`, `storage-deposit`, cross-chain deposit) all gate as\n`call`. `limit_order` is a rested 1Click order and, like\n`cross_chain_withdraw`, its own type: permitting swaps or cross-chain\nexits does not permit it. `policy_update` is a write to a locked\npolicy awaiting the approvers' quorum (`signPolicy`); it is never\nsubject to `excluded_types` — the lock is its own check.\n",
         "enum": [
           "call",
           "transfer",
@@ -7901,7 +7901,8 @@
           "limit_order",
           "deposit",
           "swap",
-          "confidential"
+          "confidential",
+          "policy_update"
         ]
       },
       "RequestStatus": {
@@ -8272,7 +8273,8 @@
               "intents_deposit",
               "confidential",
               "confidential_deposit",
-              "repair"
+              "repair",
+              "policy_update"
             ]
           }
         }
@@ -10452,6 +10454,10 @@
             "items": {
               "$ref": "#/components/schemas/RequestType"
             }
+          },
+          "locked": {
+            "type": "boolean",
+            "description": "The policy is changed only with these approvers' quorum: every\nlater `store_wallet_policy` — including the one that clears this\nflag — and every `delete_wallet_policy` waits for `threshold`\nvotes (`signPolicy` answers `pending_approval`). The owner alone\ncan set it, as a tightening, and cannot clear it. Freezing and\nunfreezing are not policy writes and stay the owner's. Accepted\nonly with a reachable quorum: `threshold` ≥ 1 and at least that\nmany approvers with an `id`.\n"
           }
         }
       },
@@ -10476,24 +10482,6 @@
               "admin",
               "signer"
             ]
-          }
-        }
-      },
-      "AdminQuorum": {
-        "type": "object",
-        "required": [
-          "required",
-          "admins"
-        ],
-        "properties": {
-          "required": {
-            "type": "integer"
-          },
-          "admins": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           }
         }
       },
@@ -10775,6 +10763,15 @@
           "frozen": {
             "type": "boolean"
           },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The policy's version on chain; the next `store_wallet_policy` carries this plus one. `0` for a policy stored before versions. Absent when the chain could not be read."
+          },
+          "locked": {
+            "type": "boolean",
+            "description": "Whether the next policy write and the delete need the approvers' quorum (`approval.locked` of the stored policy, as the contract holds it). Absent when the chain could not be read."
+          },
           "policy": {
             "type": "string",
             "enum": [
@@ -10827,9 +10824,6 @@
           "capabilities": {
             "$ref": "#/components/schemas/Capabilities"
           },
-          "admin_quorum": {
-            "$ref": "#/components/schemas/AdminQuorum"
-          },
           "webhook_url": {
             "type": "string",
             "format": "uri"
@@ -10860,7 +10854,8 @@
         "type": "object",
         "required": [
           "encrypted_base64",
-          "wallet_pubkey"
+          "wallet_pubkey",
+          "policy_hash"
         ],
         "properties": {
           "encrypted_base64": {
@@ -10868,6 +10863,10 @@
           },
           "wallet_pubkey": {
             "type": "string"
+          },
+          "policy_hash": {
+            "type": "string",
+            "description": "sha256 (hex) of the canonical plaintext that was encrypted — every object's keys sorted, compact — which a locked policy's approvers vote on inside the `policy_update` operation."
           }
         }
       },
@@ -10888,10 +10887,25 @@
         }
       },
       "SignPolicyResponse": {
+        "description": "The signature, or — when the policy on chain is locked — the approval the write waits on. Told apart by `status`: a signature has none.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SignedPolicy"
+          },
+          {
+            "$ref": "#/components/schemas/PolicyUpdatePending"
+          }
+        ]
+      },
+      "SignedPolicy": {
         "type": "object",
         "required": [
           "signature_hex",
-          "public_key_hex"
+          "public_key_hex",
+          "version",
+          "locked",
+          "valid_until",
+          "policy_hash"
         ],
         "properties": {
           "signature_hex": {
@@ -10899,6 +10913,68 @@
           },
           "public_key_hex": {
             "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What `store_wallet_policy` must be called with: the chain's version plus one. Inside the signature."
+          },
+          "locked": {
+            "type": "boolean",
+            "description": "The new policy's `approval.locked`, as the keystore read it from the plaintext. `store_wallet_policy` must be called with exactly this; it is inside the signature."
+          },
+          "valid_until": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds after which the contract refuses this signature — seven days from signing. `store_wallet_policy` must be called with exactly this; it is inside the signature."
+          },
+          "policy_hash": {
+            "type": "string",
+            "description": "sha256 (hex) of the new policy's canonical plaintext."
+          },
+          "request_hash": {
+            "type": "string",
+            "description": "The `policy_update` hash the approvers' votes were verified over. Present only when the policy on chain was locked."
+          }
+        }
+      },
+      "PolicyUpdatePending": {
+        "type": "object",
+        "required": [
+          "status",
+          "approval_id",
+          "request_id",
+          "request_hash",
+          "required_approvals",
+          "request_data"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending_approval"
+            ]
+          },
+          "approval_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Where the signature appears once the threshold is met: `GET /wallet/v1/requests/{request_id}` → `status: success`, `result_data` = `{wallet_signature, public_key_hex, wallet_pubkey, version, locked, valid_until, policy_hash, request_hash, encrypted_data, caller}`. `status: failed` with `result_data.error` when the keystore refused the votes or the policy moved on."
+          },
+          "request_hash": {
+            "type": "string",
+            "description": "The `policy_update` operation hash the approvers sign (see `Nep413Auth`): `{wallet_pubkey, policy_hash, version, locked, caller}`, canonical."
+          },
+          "required_approvals": {
+            "type": "integer"
+          },
+          "request_data": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "What the approvers are approving: `policy` (the new policy's plaintext, as it will be stored), `policy_hash`, `version`, `locked`, `caller`, `wallet_pubkey`, `encrypted_data`."
           }
         }
       },
