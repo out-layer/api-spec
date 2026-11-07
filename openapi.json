@@ -3604,7 +3604,7 @@
         ],
         "operationId": "signPolicy",
         "summary": "Sign an encrypted policy (for on-chain submission)",
-        "description": "The keystore signs the message the contract rebuilds —\n`store_wallet_policy:v2:{wallet_pubkey}:{version}:{locked}:{valid_until}:{len}:{encrypted_data}:{caller}` —\nwith the wallet's key. The signature, the encrypted data, the public\nkey, and the `version`, `locked` and `valid_until` the answer carries\nform the payload for the on-chain `store_wallet_policy(...)` call:\npass all three exactly as answered, they are inside the signature.\n`valid_until` is seven days from signing; the contract refuses the\nsignature after it.\n\n`caller` is the account that will SEND that call, and it is signed: the\nanswer works for that account and no other. Sending the prepared payload\nfrom anywhere else is refused on chain. `version` is the chain's plus\none, so the answer is good for exactly one write.\n\n**A locked policy.** When the policy on chain carries\n`approval.locked`, the keystore signs only with that policy's\napprovers' quorum. This call then answers `status: pending_approval`\nwith the `approval_id` the approvers vote on (`approve` /\n`reject`, as for any pending operation; `request_data.policy` is the\nnew policy they are approving) and a `request_id`. Once the threshold\nis met the signature is on `GET /wallet/v1/requests/{request_id}`\n(`status: success`, `result_data.wallet_signature`, `version`,\n`locked`, `valid_until`, `encrypted_data`); the owner sends\n`store_wallet_policy` with it, within `valid_until`. A vote the keystore does not count, or a policy that moved\non under the approval, fails the request with the keystore's words.\nThe first policy of a wallet, and any write over an unlocked policy,\nis signed at once.\n",
+        "description": "The keystore signs the message the contract rebuilds —\n`store_wallet_policy:v2:{wallet_pubkey}:{version}:{locked}:{valid_until}:{len}:{encrypted_data}:{caller}` —\nwith the wallet's key. The signature, the encrypted data, the public\nkey, and the `version`, `locked` and `valid_until` the answer carries\nform the payload for the on-chain `store_wallet_policy(...)` call:\npass all three exactly as answered, they are inside the signature.\n`valid_until` is seven days from signing; the contract refuses the\nsignature after it.\n\n`caller` is the account that will SEND that call, and it is signed: the\nanswer works for that account and no other. Sending the prepared payload\nfrom anywhere else is refused on chain. `version` is the chain's plus\none, so the answer is good for exactly one write.\n\n**A locked policy.** When the policy on chain carries\n`approval.locked`, the keystore signs only with that policy's\napprovers' quorum. This call then answers `status: pending_approval`\nwith the `approval_id` the approvers vote on (`approve` /\n`reject`, as for any pending operation; `request_data.policy` is the\nnew policy they are approving) and a `request_id`. Once the threshold\nis met the signature is on `GET /wallet/v1/requests/{request_id}`\n(`status: success`, `result.wallet_signature`, `version`,\n`locked`, `valid_until`, `encrypted_data`); the owner sends\n`store_wallet_policy` with it, within `valid_until`. A vote the keystore does not count, or a policy that moved\non under the approval, fails the request with the keystore's words.\nThe first policy of a wallet, and any write over an unlocked policy,\nis signed at once.\n",
         "requestBody": {
           "required": true,
           "content": {
@@ -7941,6 +7941,8 @@
           "policy_denied",
           "not_approver",
           "insufficient_balance",
+          "storage_not_registered",
+          "recipient_not_found",
           "wallet_underfunded",
           "vault_underfunded",
           "invalid_address",
@@ -10962,7 +10964,7 @@
           "request_id": {
             "type": "string",
             "format": "uuid",
-            "description": "Where the signature appears once the threshold is met: `GET /wallet/v1/requests/{request_id}` → `status: success`, `result_data` = `{wallet_signature, public_key_hex, wallet_pubkey, version, locked, valid_until, policy_hash, request_hash, encrypted_data, caller}`. `status: failed` with `result_data.error` when the keystore refused the votes or the policy moved on."
+            "description": "Where the signature appears once the threshold is met: `GET /wallet/v1/requests/{request_id}` → `status: success`, `result` = `{wallet_signature, public_key_hex, wallet_pubkey, version, locked, valid_until, policy_hash, request_hash, encrypted_data, caller}`. `status: failed` with `result.error` when the keystore refused the votes or the policy moved on."
           },
           "request_hash": {
             "type": "string",

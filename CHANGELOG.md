@@ -4,6 +4,14 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+### Fixed
+
+- `intentsWithdraw` answers `400 storage_not_registered` for a NEP-141
+  recipient with no storage on the token contract and `400 recipient_not_found`
+  for a native withdraw to a named account that does not exist — the names
+  the dry-run already answered in `reason`, where the real call said
+  `bad_request`.
+
 ### Added
 
 - **A locked policy** (`approval.locked`): the policy is changed only with
@@ -11,7 +19,7 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
   `PolicyUpdatePending` (`status: pending_approval`, a `policy_update`
   approval the approvers vote on — `request_data.policy` is the new policy —
   and a `request_id`); once the threshold is met the signature is on
-  `getRequest` (`result_data.wallet_signature`, `version`, `locked`,
+  `getRequest` (`result.wallet_signature`, `version`, `locked`,
   `encrypted_data`), and the owner sends `store_wallet_policy` with it. The
   owner alone can set the lock (a tightening) and cannot clear it; a delete
   is refused on chain while it is set; freezing stays the owner's.
