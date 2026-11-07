@@ -4,6 +4,29 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+### Added
+
+- `intentsStorageDeposit` (`POST /wallet/v1/intents/storage-deposit`):
+  registers an account on a NEP-141 token paid from the wallet's wNEAR inside
+  intents.near, gasless; the amount is the token's storage minimum, at most
+  0.00125 NEAR; an account already registered answers `already_registered`
+  with nothing paid; a second deposit for the same token and account while one
+  is under way is `409`; `success` means the registration is on chain. Request
+  type and policy type `intents_storage_deposit`, permitted only by name.
+
+### Security
+
+- `call` to the NEAR Intents contract (`intents.near`) is refused unless the
+  policy sets `capabilities.intents_call.allowed` — with no policy too. The
+  contract takes the wallet's own account as the owner of its intents account:
+  a call there could add a key that signs for it outside the TEE, or move any
+  intents balance past every limit. `Capabilities.intents_call` added. The
+  same capability gates a `w_execute_extension` promise aimed at the intents
+  contract (the bound account's intents account).
+- `raw_sign` signs with the NEAR key only when `chains` lists `near`, with or
+  without a policy; an absent `chains` is every chain but `near`. A raw NEAR
+  signature is any NEAR transaction.
+
 ### Fixed
 
 - `intentsWithdraw` answers `400 storage_not_registered` for a NEP-141

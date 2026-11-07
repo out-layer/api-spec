@@ -834,7 +834,7 @@
         ],
         "operationId": "call",
         "summary": "Sign and broadcast a NEAR function call",
-        "description": "Native NEAR contract call. Policy is enforced before signing; if the\ncall exceeds limits, the response carries `status=pending_approval`\nand an `approval_id` for the multisig flow.\n\n\nAgent Connect: a `w_execute_extension` call aimed at the wallet's own\nbound account is additionally checked against the LIVE chain — binding\nliveness, spend grant, call form, reserve floor — before anything is\nsigned. That refusal is a `403` shaped as `AgentConnectDeniedResponse`\n(not the generic error body), carrying the class, the promise index and\na `terminal` flag. The policy engine independently decodes the same\nrequest and rules it on the owner's own limits.\n",
+        "description": "Native NEAR contract call. Policy is enforced before signing; if the\ncall exceeds limits, the response carries `status=pending_approval`\nand an `approval_id` for the multisig flow.\n\n`call` gives the agent what the wallet's own NEAR account can do:\nan `ft_transfer` moves that token whatever the per-token limits say\n(they see the 1 yoctoNEAR deposit). A call to the NEAR Intents contract\n(`intents.near`) is refused (`403 policy_denied`) unless the policy sets\n`capabilities.intents_call` — see `Capabilities`; use the\n`/wallet/v1/intents/*` endpoints instead.\n\n\nAgent Connect: a `w_execute_extension` call aimed at the wallet's own\nbound account is additionally checked against the LIVE chain — binding\nliveness, spend grant, call form, reserve floor — before anything is\nsigned. That refusal is a `403` shaped as `AgentConnectDeniedResponse`\n(not the generic error body), carrying the class, the promise index and\na `terminal` flag. The policy engine independently decodes the same\nrequest and rules it on the owner's own limits.\n",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -1306,6 +1306,83 @@
           },
           "503": {
             "$ref": "#/components/responses/RouteUnavailable"
+          }
+        }
+      }
+    },
+    "/wallet/v1/intents/storage-deposit": {
+      "post": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "intentsStorageDeposit",
+        "summary": "Register storage on a NEP-141 token, paid from the intents wNEAR balance",
+        "description": "Registers `account_id` (defaults to the wallet's own NEAR account) on the\nNEP-141 contract `token`, paid with the wallet's **wNEAR inside\n`intents.near`** — the defuse `storage_deposit` intent, gasless via the\nsolver relay. The wallet needs no native NEAR. `POST\n/wallet/v1/storage-deposit` does the same paid in native NEAR from the\nwallet's on-chain account.\n\nThe usual use: before `POST /wallet/v1/intents/withdraw` of a NEP-141 to\nan account with no storage on the token (the withdraw answers\n`storage_not_registered`), register that account here and retry.\n\nThe amount is the token contract's `storage_balance_bounds().min`, read\nat the call, and at most 0.00125 NEAR (`1250000000000000000000`\nyoctoNEAR, the minimum of a standard NEP-141): a token asking more is\n`400`, register it through `POST /wallet/v1/call`. `intents.near` never\nrefunds the wNEAR it spends on a storage deposit, so nothing is signed\nfor an account that is already registered: the answer is `success` with\n`already_registered: true`, before the policy and any approval. A\nregistration that cannot be read is a `503`, never treated as absent.\nWhile a deposit for the same token and account is `processing` or\n`pending_approval` on this wallet, another is `409 conflict` naming\nthat request.\n\n`success` means the account IS registered: the deposit runs after the\nintent in a separate receipt, and the call answers `processing` with a\n`poll_url` until `storage_balance_of` shows it. A request whose intent\nexecuted and left the account unregistered ends `failed` with\n`result.wnear_spent: true`.\n\nGated by the policy as its own type, `intents_storage_deposit`: it\nspends the intents balance, so neither `call` nor `storage_deposit`\npermits it. The token contract is the destination for an address list,\nthe wNEAR (`nep141:wrap.near`) the token for limits. On a wallet that requires approval it answers\n`pending_approval`. A wNEAR balance below the deposit is `400\ninsufficient_balance`. NEAR Intents is mainnet-only: `503` on testnet.\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/AnswerWithin"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IntentsStorageDepositRequest"
+              },
+              "examples": {
+                "receiver": {
+                  "summary": "Register a withdraw receiver on USDC",
+                  "value": {
+                    "token": "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+                    "account_id": "4f2d8a1c9b3e7f60a5d4c3b2a1908f7e6d5c4b3a29180f7e6d5c4b3a29180f7e"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registered, already registered, processing, or queued for approval",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntentsStorageDepositResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "A deposit for the same token and account is already under way; the message names its request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/OperationLimitReached"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -7892,7 +7969,7 @@
       },
       "RequestType": {
         "type": "string",
-        "description": "Tracked async request / policy transaction type. `withdraw` is a\nsame-chain intents withdrawal; `cross_chain_withdraw` is a separate type\nfor 1Click bridge-out (a policy must list it explicitly — it is NOT\nfolded into `withdraw`). `confidential` covers every confidential-shard\nop (shield / unshield / withdraw / transfer / swap). The deposit family\n(`intents/deposit`, `storage-deposit`, cross-chain deposit) all gate as\n`call`. `limit_order` is a rested 1Click order and, like\n`cross_chain_withdraw`, its own type: permitting swaps or cross-chain\nexits does not permit it. `policy_update` is a write to a locked\npolicy awaiting the approvers' quorum (`signPolicy`); it is never\nsubject to `excluded_types` — the lock is its own check.\n",
+        "description": "Tracked async request / policy transaction type. `withdraw` is a\nsame-chain intents withdrawal; `cross_chain_withdraw` is a separate type\nfor 1Click bridge-out (a policy must list it explicitly — it is NOT\nfolded into `withdraw`). `confidential` covers every confidential-shard\nop (shield / unshield / withdraw / transfer / swap). The deposit family\n(`intents/deposit`, `storage-deposit`, cross-chain deposit) all gate as\n`call`. `limit_order` is a rested 1Click order and, like\n`cross_chain_withdraw`, its own type: permitting swaps or cross-chain\nexits does not permit it. `intents_storage_deposit` pays a token\nregistration from the intents wNEAR balance and is its own type:\n`call` does not permit it. `policy_update` is a write to a locked\npolicy awaiting the approvers' quorum (`signPolicy`); it is never\nsubject to `excluded_types` — the lock is its own check.\n",
         "enum": [
           "call",
           "transfer",
@@ -7902,6 +7979,7 @@
           "deposit",
           "swap",
           "confidential",
+          "intents_storage_deposit",
           "policy_update"
         ]
       },
@@ -8273,6 +8351,7 @@
               "storage_deposit",
               "intents_transfer",
               "intents_deposit",
+              "intents_storage_deposit",
               "confidential",
               "confidential_deposit",
               "repair",
@@ -8833,6 +8912,105 @@
               "null"
             ],
             "description": "Account to register. Defaults to the wallet's own NEAR address."
+          }
+        }
+      },
+      "IntentsStorageDepositRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "NEP-141 token contract, bare (`usdc.near`) or as its intents id (`nep141:usdc.near`)."
+          },
+          "account_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Account to register. Defaults to the wallet's own NEAR account."
+          }
+        }
+      },
+      "IntentsStorageDepositResponse": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "status",
+          "token",
+          "account_id",
+          "already_registered"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RequestStatus"
+          },
+          "token": {
+            "type": "string",
+            "description": "The token contract, bare."
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "amount": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "wNEAR paid, in yoctoNEAR: the contract's storage minimum. Absent when nothing was paid (`already_registered`)."
+          },
+          "already_registered": {
+            "type": "boolean",
+            "description": "True when the account already had storage; nothing was signed or paid."
+          },
+          "intent_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "approval_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Present only on `pending_approval` — the approval to vote on."
+          },
+          "required": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Present only on `pending_approval` — approvals needed."
+          },
+          "approved": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Present only on `pending_approval` — approvals collected so far."
+          },
+          "request_hash": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Present on `pending_approval` — sha256(canonical_json(op)); sign to approve."
+          },
+          "poll_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Present on `processing`: the intent was handed over and the registration is not visible yet. `GET` it for the outcome."
           }
         }
       },
@@ -10501,7 +10679,7 @@
       },
       "RawSignCapability": {
         "type": "object",
-        "description": "`raw_sign` — sign arbitrary raw bytes. `chains` is an optional allowlist; when absent, ALL chains (including `near`, which can sign a NEAR tx/intent outside the structured policy — enable with care).",
+        "description": "`raw_sign` — sign arbitrary raw bytes. `chains` is an optional allowlist; when absent, every chain **except `near`**. `near` is signed only when listed, with or without a policy: a raw signature by the NEAR key is any NEAR transaction, outside the structured policy — including a call to `intents.near` that hands the wallet's intents account to another key.",
         "properties": {
           "allowed": {
             "type": "boolean"
@@ -10565,7 +10743,7 @@
       },
       "Capabilities": {
         "type": "object",
-        "description": "Default-DENY opt-ins for the non-Built primitives, stored alongside\n`rules` / `approval` in the encrypted policy. Every capability defaults to\nDENY under a policy **except** `sign_message` (default-allow). A wallet\nwith no policy at all is unrestricted.\n",
+        "description": "Default-DENY opt-ins for the non-Built primitives, stored alongside\n`rules` / `approval` in the encrypted policy. Every capability defaults to\nDENY under a policy **except** `sign_message` (default-allow). A wallet\nwith no policy at all is unrestricted, **except `intents_call`**, which\nstays denied without a policy too.\n",
         "properties": {
           "raw_sign": {
             "$ref": "#/components/schemas/RawSignCapability"
@@ -10593,6 +10771,14 @@
           },
           "solana_sign": {
             "$ref": "#/components/schemas/SolanaSignCapability"
+          },
+          "intents_call": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Capability"
+              }
+            ],
+            "description": "A `call` whose receiver is the NEAR Intents contract (`intents.near`, `intents.far`) — directly, or as a `w_execute_extension` promise of the bound account (then the bound account's own intents account is at stake). **Default-DENY with or without a policy.** The contract treats a transaction from an account as the owner of that account's intents account, for 1 yoctoNEAR: such a call can `add_public_key` — a key outside the TEE that signs for the intents account permanently, past any later policy, freeze or lock — or move any intents balance past the transaction types, the address list and the per-token limits (`ft_withdraw`, `mt_transfer`). Every intents operation has its own endpoint (`/wallet/v1/intents/*`); set `allowed: true` only to hand the agent the intents account itself. `call` must be permitted as well."
           }
         }
       },
