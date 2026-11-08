@@ -23,6 +23,15 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
   intents balance past every limit. `Capabilities.intents_call` added. The
   same capability gates a `w_execute_extension` promise aimed at the intents
   contract (the bound account's intents account).
+- A Trusted operation (swap, cross-chain withdraw, limit order, payment
+  check, every confidential operation) is signed only as one plain transfer
+  from the wallet, in the operation's token, no more than its amount; a
+  message carrying any other intent (`add_public_key` above all), a second
+  intent, a memo, an unread field or a key twice is refused before signing.
+  A confidential operation's intent from 1Click is also held to its quote —
+  deposit address, asset, exact amount — and refused `400 bad_request`
+  ("1Click's intent is not the transfer that was quoted") otherwise; nothing
+  moves.
 - `raw_sign` signs with the NEAR key only when `chains` lists `near`, with or
   without a policy; an absent `chains` is every chain but `near`. A raw NEAR
   signature is any NEAR transaction.
