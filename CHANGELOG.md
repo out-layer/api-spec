@@ -4,6 +4,13 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+### Changed
+
+- `purchaseAllowance` (`POST /subscription/purchase`) refuses a key OutLayer
+  funded with a grant: `403` with `reason: grant_key_not_purchasable`,
+  terminal. A grant pays for calls only; a subscription on that key is
+  OutLayer's to give. `CallRefusal.reason` gains `grant_key_not_purchasable`.
+
 ### Added
 
 - `intentsStorageDeposit` (`POST /wallet/v1/intents/storage-deposit`):
