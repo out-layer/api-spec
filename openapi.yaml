@@ -3192,6 +3192,17 @@ paths:
         the next `store_wallet_policy` must exceed by one, and whether that
         write (and a delete) needs the approvers' quorum. Both absent when the
         chain could not be read.
+
+        A response that carries `version` describes ONE record of the chain,
+        read at the newest block when the call is made: `rules`, `approval`,
+        `capabilities`, `authorized_key_hashes`, `refund_addresses` and
+        `frozen` are that record's, so a policy stored a moment ago reads back
+        as stored, with nothing to invalidate first. An RPC node a block behind
+        can still answer the previous record for a moment: compare what you
+        wrote and retry on a mismatch. A response without `version` could not
+        read the chain and answers the coordinator's last copy. A record the
+        keystore could not decrypt is an error (`503` when the keystore is
+        unavailable), never a version without its rules.
       responses:
         '200':
           description: Current policy + usage
@@ -3302,7 +3313,8 @@ paths:
         Forces the coordinator to drop its cached `no_policy` flag for a wallet.
         Call this after submitting `store_wallet_policy(...)` on-chain so that
         subsequent operations pick up the new policy without waiting for the
-        5-minute TTL to expire.
+        5-minute TTL to expire. `GET /wallet/v1/policy` does not depend on it:
+        that read follows the chain on its own.
       security: []
       requestBody:
         required: true
@@ -3541,6 +3553,13 @@ paths:
       description: |
         A NO vote, proven the same two ways as an approve vote. A reject from a
         policy approver vetoes the action.
+
+        The request is cancelled once a final block holds the policy the
+        approver was admitted under: a NO vote cast within a block or two of a
+        policy change answers `reject_vote_recorded` and leaves the request
+        pending. The same account's NO vote sent again is proven and judged as a
+        first one, asks for the cancel again, and answers as a first vote
+        does; it is not stored twice.
       security: []
       parameters:
         - name: id
@@ -3597,8 +3616,9 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           description: |
-            `already_approved`: this account has already voted on this
-            approval, approve or reject. One vote per account.
+            `already_approved`: this account has already voted YES on this
+            approval. One vote per account; a repeated NO vote is answered
+            `200` (see above).
             `conflict`: the approval is no longer pending (approved, rejected
             or expired); the message names its state. Stop; do not retry.
           content:
@@ -9363,8 +9383,10 @@ components:
           description: >-
             `rejected` — the reject came from a REAL policy approver, so the request is
             cancelled (a real reject vetoes it irrevocably). `reject_vote_recorded` — the
-            signer is not a configured approver: the vote is stored and the request stays
-            `pending_approval` (the keystore still vetoes execution at sign time).
+            vote is stored and the request stays `pending_approval` (the keystore still
+            vetoes execution at sign time): the policy it was judged on is not yet in a
+            final block — the same NO vote sent again cancels the request once it is —
+            or the request had already started, and nothing cancels it.
           enum: [rejected, reject_vote_recorded]
 
     # ----- Audit & requests -----

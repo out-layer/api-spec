@@ -6,6 +6,19 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Changed
 
+- `getPolicy` (`GET /wallet/v1/policy`) answers one record of the chain: the
+  rules, `refund_addresses` and `frozen` are of the same record as `version`
+  and `locked`, read when the call is made at the newest block. A policy
+  write, a freeze or a delete reads back on the next call; `invalidatePolicyCache`
+  is not needed before it. An RPC node a block behind can still answer the
+  previous record for a moment: compare what you wrote and retry on a
+  mismatch. No field is added or removed.
+- `rejectRequest` (`POST /wallet/v1/reject/{id}`) cancels the request once a
+  final block holds the policy the approver was admitted under; until then
+  it answers `reject_vote_recorded`. The same account's NO vote sent again is
+  proven and judged like a first one, asks for the cancel again and answers
+  `200` like a first vote, instead of `409 already_approved`; a stored YES is
+  still `409`.
 - `purchaseAllowance` (`POST /subscription/purchase`) refuses a key OutLayer
   funded with a grant: `403` with `reason: grant_key_not_purchasable`,
   terminal. A grant pays for calls only; a subscription on that key is
