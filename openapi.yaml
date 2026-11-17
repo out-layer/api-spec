@@ -7104,6 +7104,13 @@ components:
             Present on `pending_approval` — sha256(canonical_json(op)); sign to
             approve.
 
+        poll_url:
+          type: [string, 'null']
+          description: >-
+            Present on `processing`: the transaction was sent and its outcome
+            is not known yet (the node stopped waiting — a call that yields, a
+            timeout). The request is already charged to the velocity counters;
+            `GET` this URL for `success` or `failed`, and do not resend.
     TransferRequest:
       type: object
       description: |-
@@ -7311,6 +7318,11 @@ components:
           $ref: '#/components/schemas/RequestStatus'
         tx_hash:
           type: [string, 'null']
+        poll_url:
+          type: [string, 'null']
+          description: >-
+            Present on `processing`: the deposit was sent and its outcome is
+            not known yet. `GET` this URL; do not resend.
 
     WithdrawRequest:
       type: object
