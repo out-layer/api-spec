@@ -10920,6 +10920,14 @@
             "items": {
               "type": "string"
             }
+          },
+          "unlisted": {
+            "type": "string",
+            "enum": [
+              "refuse",
+              "ask"
+            ],
+            "description": "Under `whitelist`, what happens to a payment whose destination is\nnot on the list. `refuse` (and absent): `403 policy_denied`. `ask`:\nthe payment answers `pending_approval` and waits for the approvers,\nwho sign over the exact address, however small its amount —\n`approval.auto_up_to` and `approval.excluded_types` do not let it\nthrough. Applies to `transfer`, `withdraw`, `intents_transfer` and\n`cross_chain_withdraw`; a call, a delete, a limit order, a storage\ndeposit or a confidential op aimed off the list is refused either\nway. `ask` is accepted only under `whitelist` and with a reachable\nquorum in `approval`. A payment that asks is still held to\neverything else first: its type, its token, the limits, and for\n`cross_chain_withdraw` its capability.\n"
           }
         }
       },
@@ -10998,7 +11006,30 @@
           "locked": {
             "type": "boolean",
             "description": "The policy is changed only with these approvers' quorum: every\nlater `store_wallet_policy` — including the one that clears this\nflag — and every `delete_wallet_policy` waits for `threshold`\nvotes (`signPolicy` answers `pending_approval`). The owner alone\ncan set it, as a tightening, and cannot clear it. Freezing and\nunfreezing are not policy writes and stay the owner's. Accepted\nonly with a reachable quorum: `threshold` ≥ 1 and at least that\nmany approvers with an `id`.\n"
+          },
+          "auto_up_to": {
+            "type": "object",
+            "description": "Per window and token, the total (smallest units, decimal string)\nthat leaves without the approvers. A `transfer`, a `withdraw` or an\n`intents_transfer` that the approval trigger would hold runs at\nonce while, in every window that names its token, what the wallet\nalready spent there plus this amount is at most the entry. The\nwindows and their counters are those of `rules.limits`: the clock\nhour, the UTC day, the calendar month, counting approved spend\ntoo. A token no window names always waits; `*` is not accepted;\nan entry that is not a whole number is refused when the policy is\nstored. Every other op type waits as without it. Limits are\nchecked first: above a limit is `403 policy_denied`, approved or\nnot.\n",
+            "properties": {
+              "hourly": {
+                "$ref": "#/components/schemas/AutoUpToWindow"
+              },
+              "daily": {
+                "$ref": "#/components/schemas/AutoUpToWindow"
+              },
+              "monthly": {
+                "$ref": "#/components/schemas/AutoUpToWindow"
+              }
+            }
           }
+        }
+      },
+      "AutoUpToWindow": {
+        "type": "object",
+        "description": "Token id (`native`, `nep141:<contract>`, …) → amount in the token's smallest unit.",
+        "additionalProperties": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
         }
       },
       "Approver": {
@@ -11017,7 +11048,7 @@
           },
           "role": {
             "type": "string",
-            "description": "Optional. `admin` may also modify policy / freeze; `signer` may only approve transactions. Defaults to `signer` when omitted.",
+            "description": "Optional label, stored with the policy and read by nothing: every approver's vote counts the same, on an operation and on a change to a locked policy alike. Changing an unlocked policy and freezing the wallet belong to the policy's owner — the NEAR account that stored it — whatever is written here.",
             "enum": [
               "admin",
               "signer"
