@@ -91,7 +91,7 @@
         ],
         "operationId": "registerWallet",
         "summary": "Register a new wallet",
-        "description": "Creates a new multi-chain wallet and returns an API key. For most\ncallers, send `{}` — an anonymous wallet is created and an API key is\nreturned in `api_key` (shown once, not retrievable later).\n\nOptional fields enable advanced registration paths:\n- `account_id` + `pubkey` + `message` + `signature`: bind the wallet to\n  a NEAR account via proof-of-ownership. `pubkey` must be a full-access\n  key of `account_id` (or the key of an implicit account not created\n  yet); a function-call key is refused. The same holds for every\n  `Bearer near:` request and for `PUT /wallet/v1/api-key`.\n- `vault_id`: bind to a customer-owned vault for sovereign custody (see\n  vault docs).\n\nRate-limited: 30 requests per minute per IP.\n",
+        "description": "Creates a new multi-chain wallet and returns an API key. For most\ncallers, send `{}` — an anonymous wallet is created and an API key is\nreturned in `api_key` (shown once, not retrievable later).\n\nOptional fields enable advanced registration paths:\n- `account_id` + `pubkey` + `message` + `signature`: bind the wallet to\n  a NEAR account via proof-of-ownership. `pubkey` must be a full-access\n  key of `account_id` (or the key of an implicit account not created\n  yet); a function-call key is refused. The same holds for every\n  `Bearer near:` request and for `PUT /wallet/v1/api-key`.\n- `vault_id`: bind to a customer-owned vault for sovereign custody (see\n  vault docs).\n\nA wallet whose owner can leave with its keys is not registered here: a\nbody that carries `master`, in any value, is refused with 400. Ask for\na link with `POST /wallet/v1/exit-link` and have the owner complete it.\n\nRate-limited: 30 requests per minute per IP.\n",
         "security": [],
         "requestBody": {
           "required": false,
@@ -3437,7 +3437,7 @@
         ],
         "operationId": "authSign",
         "summary": "Sign an OutLayer NEAR-key auth challenge (Bearer / register / api-key)",
-        "description": "Produces the OutLayer authentication signature used to construct a\n`Bearer near:` token, or to authenticate `POST /register` /\n`PUT /wallet/v1/api-key` from a deterministic wallet's own NEAR key.\n\nThe keystore **builds** the exact challenge string\n`<prefix>:<seed>:<ts>` (where `prefix` is `auth` for `bearer`, else the\npurpose) with a **fresh server timestamp** and signs it raw ed25519. The\nclient does NOT supply or control the timestamp — the fresh `ts` is what\nthe coordinator's verifier requires. Send the returned `auth_message`\nverbatim.\n\nThis is the replacement for the old\n`POST /wallet/v1/sign-message {format:\"raw\"}`. It maps to an always-allowed,\nnon-fund `Op::Auth` (domain-separated from a tx hash) — no capability and\nno multisig gate it, but a frozen wallet still cannot sign.\n",
+        "description": "Produces the OutLayer authentication signature used to construct a\n`Bearer near:` token, or to authenticate `POST /register` /\n`PUT /wallet/v1/api-key` from a deterministic wallet's own NEAR key.\n\nThe keystore **builds** the exact challenge string\n`<prefix>:<seed>:<ts>` (where `prefix` is `auth` for `bearer`, else the\npurpose) with a **fresh server timestamp** and signs it raw ed25519.\nFor `api-key` the challenge also names the key being registered:\n`api-key:<seed>:<ts>:<key_hash>` (+`:<vault>` when `vault_id` is set), so\na signature registers that key and no other. The\nclient does NOT supply or control the timestamp — the fresh `ts` is what\nthe coordinator's verifier requires. Send the returned `auth_message`\nverbatim.\n\nThis is the replacement for the old\n`POST /wallet/v1/sign-message {format:\"raw\"}`. It maps to an always-allowed,\nnon-fund `Op::Auth` (domain-separated from a tx hash) — no capability and\nno multisig gate it, but a frozen wallet still cannot sign.\n",
         "requestBody": {
           "required": true,
           "content": {
@@ -3464,7 +3464,8 @@
                   "summary": "Authenticate PUT /api-key",
                   "value": {
                     "purpose": "api-key",
-                    "seed": "my-app-session"
+                    "seed": "my-app-session",
+                    "key_hash": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
                   }
                 }
               }
@@ -3490,6 +3491,151 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/wallet/v1/exit-link": {
+      "post": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "createExitLink",
+        "summary": "Ask for a wallet whose owner can leave with its keys",
+        "description": "An agent cannot create such a wallet itself: its owner is a NEAR account\nregistered in the keystore DAO, and the registration is a transaction a\nperson signs. The agent asks here, hands its user\n`https://app.outlayer.ai/exit?link=<link>`, keeps `api_key`, and polls\n`GET /wallet/v1/address` with it — 401 until the user has finished, the\naddress after.\n\nNothing is stored by this call. The link carries the key's hash, the\nseed, the network and the expiry under the service's MAC.\n\nA deployment where owner wallets are not enabled answers 500 on this\nroute and the two below.\n",
+        "security": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExitLinkRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The key and the link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExitLinkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/wallet/v1/owner-wallet/prepare": {
+      "post": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "prepareOwnerWallet",
+        "summary": "Read an exit link before signing for it",
+        "description": "What the owner's page needs before it asks for a signature: the link\nread back, whether the account is registered in the keystore DAO, its\ngeneration, and the exact message to sign. Creates nothing.\n",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareOwnerWalletRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The link, read back",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrepareOwnerWalletResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/wallet/v1/owner-wallet": {
+      "post": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "createOwnerWallet",
+        "summary": "Create a wallet from an exit link, signed by its owner",
+        "description": "The owner's NEP-413 signature over the message of the prepare call\ncreates the wallet in the owner's current generation and makes the\nlink's key its API key.\n\nCreate-only: if the owner already has a wallet with that seed, or the\nlink was used before, the answer is 409 and nothing is written. A link\nnever adds a key to a wallet that exists.\n",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerWalletRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The wallet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerWalletResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "The owner already has a wallet with that seed, the link was already used, or the owner is claiming the keys of the current generation (the wallet is created once the claim has settled)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -8218,6 +8364,10 @@
               "null"
             ]
           },
+          "exit_owner": {
+            "description": "Present for a wallet whose owner can leave with its keys through the keystore DAO: the owner's NEAR account and the generation the wallet belongs to. Such a wallet reports no `vault_id`.",
+            "$ref": "#/components/schemas/ExitOwnerOfWallet"
+          },
           "asset_account_id": {
             "type": [
               "string",
@@ -8238,6 +8388,186 @@
               "null"
             ],
             "description": "Agent Connect: the executor's native balance in yoctoNEAR, cached about 30 seconds. Present only for chain=near on a BOUND wallet — it is here so whoever funds the executor learns the account and whether it needs funding in one call. Absent also when the chain could not be read, which is not a balance of zero."
+          }
+        }
+      },
+      "ExitOwnerOfWallet": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "generation"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "description": "The NEAR account registered in the keystore DAO that owns the wallet."
+          },
+          "generation": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "description": "The owner's generation the wallet was created in. It moves on by one when the owner claims the keys; the wallets of a generation that left answer 403."
+          }
+        }
+      },
+      "ExitLinkRequest": {
+        "type": "object",
+        "properties": {
+          "seed": {
+            "type": "string",
+            "description": "The seed of the wallet to create. Absent — the owner's next free numbered seed."
+          }
+        }
+      },
+      "ExitLinkResponse": {
+        "type": "object",
+        "required": [
+          "api_key",
+          "link",
+          "expires_at"
+        ],
+        "properties": {
+          "api_key": {
+            "type": "string",
+            "description": "The `wk_` key the wallet will answer to once its owner has completed the link. Shown once; it authenticates nothing until then."
+          },
+          "link": {
+            "type": "string",
+            "description": "A bare token, not a URL: the owner's page takes it as `https://app.outlayer.ai/exit?link=<link>`."
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds after which the link creates nothing."
+          }
+        }
+      },
+      "PrepareOwnerWalletRequest": {
+        "type": "object",
+        "required": [
+          "link",
+          "account_id"
+        ],
+        "properties": {
+          "link": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string",
+            "description": "The NEAR account that will own the wallet."
+          }
+        }
+      },
+      "PrepareOwnerWalletResponse": {
+        "type": "object",
+        "required": [
+          "registered",
+          "dao",
+          "key_hash",
+          "expires_at",
+          "recipient"
+        ],
+        "properties": {
+          "registered": {
+            "type": "boolean",
+            "description": "Whether `account_id` is registered as an owner in the keystore DAO."
+          },
+          "dao": {
+            "type": "string",
+            "description": "The keystore DAO contract of this network."
+          },
+          "generation": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The owner's current generation; `null` until registered."
+          },
+          "seed": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The link's seed; `null` — the owner's next free numbered seed."
+          },
+          "key_hash": {
+            "type": "string",
+            "description": "The sha256 of the key the link was issued with."
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The exact message the owner signs: `outlayer-owner-wallet:v1:<dao>:<account>:<generation>:<seed|next>:<key_hash>:<expires_at>`. `null` until the account is registered."
+          },
+          "recipient": {
+            "type": "string",
+            "description": "The NEP-413 recipient of that signature — `outlayer:owner-wallet`."
+          }
+        }
+      },
+      "OwnerWalletRequest": {
+        "type": "object",
+        "required": [
+          "link",
+          "account_id",
+          "public_key",
+          "signature",
+          "nonce"
+        ],
+        "properties": {
+          "link": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string",
+            "description": "The account that becomes the wallet's owner — the signer of the proof."
+          },
+          "public_key": {
+            "type": "string",
+            "description": "`ed25519:<base58>` — a full-access key of `account_id`."
+          },
+          "signature": {
+            "type": "string",
+            "description": "Base64 NEP-413 signature over the `message` of the prepare call, recipient `outlayer:owner-wallet`."
+          },
+          "nonce": {
+            "type": "string",
+            "description": "Base64 32-byte NEP-413 nonce."
+          }
+        }
+      },
+      "OwnerWalletResponse": {
+        "type": "object",
+        "required": [
+          "wallet_id",
+          "near_account_id",
+          "owner",
+          "generation",
+          "seed"
+        ],
+        "properties": {
+          "wallet_id": {
+            "type": "string"
+          },
+          "near_account_id": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "generation": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "seed": {
+            "type": "string"
           }
         }
       },
@@ -10456,7 +10786,7 @@
         "properties": {
           "purpose": {
             "type": "string",
-            "description": "`bearer` → challenge `auth:<seed>:<ts>` (+`:<vault>` when `vault_id` set); `register` → `register:<seed>:<ts>`; `api-key` → `api-key:<seed>:<ts>`.",
+            "description": "`bearer` → challenge `auth:<seed>:<ts>` (+`:<vault>` when `vault_id` set); `register` → `register:<seed>:<ts>`; `api-key` → `api-key:<seed>:<ts>:<key_hash>` (+`:<vault>` when `vault_id` set).",
             "enum": [
               "bearer",
               "register",
@@ -10469,7 +10799,12 @@
           },
           "vault_id": {
             "type": "string",
-            "description": "Vault scope — only valid for `purpose=bearer`."
+            "description": "Vault scope — valid for `purpose=bearer` and `purpose=api-key`."
+          },
+          "key_hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "The sha256 of the key to register, 64 lower-case hex characters. Required for `purpose=api-key`, refused for the other purposes."
           }
         }
       },
