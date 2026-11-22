@@ -6,6 +6,12 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Changed
 
+- `POST /call` and `POST /subscription/purchase` refuse a payment key of a
+  wallet whose keys have left custody (its owner's exit, or its vault's):
+  `403`, `reason: wallet_exited`.
+- `PUT /wallet/v1/binding` binds a wallet whose keys can leave custody (an
+  owner's exit-link wallet, a vault wallet) only to the account its keys
+  leave to; any other account, and `hos_lease`, answer `400`.
 - A wallet's webhook (`webhook_url` of a policy, a vault's webhook URL,
   subscription notifications) carries no `X-Webhook-Signature` header; it is
   verified by `X-Webhook-Signature-Ed25519`. `X-Webhook-Signature` is on an
