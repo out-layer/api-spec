@@ -6,6 +6,11 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Changed
 
+- A wallet's webhook (`webhook_url` of a policy, a vault's webhook URL,
+  subscription notifications) carries no `X-Webhook-Signature` header; it is
+  verified by `X-Webhook-Signature-Ed25519`. `X-Webhook-Signature` is on an
+  owner's events only, where it is the HMAC under the owner's own secret, and
+  those carry the Ed25519 signature beside it.
 - `getPolicy` (`GET /wallet/v1/policy`) answers one record of the chain: the
   rules, `refund_addresses` and `frozen` are of the same record as `version`
   and `locked`, read when the call is made at the newest block. A policy
@@ -26,6 +31,13 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Added
 
+- Webhook signatures a receiver can verify. Every webhook — a wallet's and an
+  owner's — is signed with the network's Ed25519 key and carries
+  `X-Webhook-Id`, `X-Webhook-Timestamp`, `X-Webhook-Key-Id` and
+  `X-Webhook-Signature-Ed25519`; the signature covers the delivery id (a
+  random UUID), the timestamp, `X-Wallet-Id`, `X-Event-Type` and the body. `getWebhookKeys`
+  (`GET /wallet/v1/webhook-keys`, no authentication) answers the public keys.
+  The `Webhooks` tag holds the rule.
 - `intentsStorageDeposit` (`POST /wallet/v1/intents/storage-deposit`):
   registers an account on a NEP-141 token paid from the wallet's wNEAR inside
   intents.near, gasless; the amount is the token's storage minimum, at most
