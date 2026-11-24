@@ -6,6 +6,46 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Changed
 
+- **Breaking.** A withdrawal that carries `memo` is refused,
+  `400 memo_not_supported` (`intentsWithdraw`, `confidentialWithdraw` and
+  their dry-runs, where it is the `reason`). No route delivers a memo or a
+  destination tag to the recipient; a body with one used to run without it.
+- **Breaking.** `WithdrawRequest`, `SwapRequest` and `IntentsTransferRequest`
+  refuse a field they do not name, `400 bad_request` naming the field.
+- **Breaking.** The `min_amount_out` of a swap (public and confidential) is
+  compared to the quote's `min_amount_out` — what 1Click guarantees — instead
+  of its `amount_out` estimate, which delivery may fall 1% under. A floor set
+  at a quote's `amount_out` is now refused, and one set exactly at an earlier
+  quote's `min_amount_out` is refused when the fresh quote is a unit worse:
+  set it under that figure by the movement you accept. The refusal is `400 below_min_amount_out` with
+  `quoted_min_amount_out` (it was `400 bad_request`), and on a confidential
+  swap a floor that cannot be compared signs nothing.
+- **Breaking.** An amount of a withdrawal, a swap, an intents transfer, a
+  shield, an unshield, a confidential transfer or a confidential deposit
+  intent (`amount`, `amount_in`, `amount_out`, `max_amount_in`,
+  `min_amount_out`) is decimal digits only: a leading `+`, a leading zero or
+  whitespace is `400 bad_request`.
+- **Breaking.** Every confidential route that takes a body answers one that
+  does not parse — on withdraw and swap a field they do not name included —
+  with `400 bad_request` in the wallet's error envelope, as the public routes
+  do (it was the framework's `422` text, and `415` without a JSON
+  `Content-Type`).
+- A request refused at its quote after the call returned (an `async`
+  withdrawal, an approved request) ends `failed` with `never_submitted: true`
+  and, in `result`, `error_code`, the bound and the quote's figure, as the
+  `400` of the call carries them.
+- `intentsWithdrawDryRun` on a cross-chain route answers the bridge quote's
+  figures as fields (`QuoteFigures`, flat in `DryRunResponse`), with 1Click's
+  values unchanged; `message` still summarises them.
+- `SwapQuoteResponse` (swap quotes, the confidential withdraw dry-run) gains
+  `amount_in`, `min_amount_in`, `amount_in_usd`, `amount_out_usd`,
+  `withdraw_fee`, `refund_fee` and `reason`.
+- The `result` of a cross-chain withdrawal, a swap and a confidential
+  operation carries `quote` — the quote it ran with (`ExecutedQuote`) — and
+  `refunded_amount` once 1Click reports one.
+- `WithdrawRequest.amount` and `SwapRequest.amount_in` are no longer
+  `required` by the schema: one of the two sizes is.
+
 - `POST /call` and `POST /subscription/purchase` refuse a payment key of a
   wallet whose keys have left custody (its owner's exit, or its vault's):
   `403`, `reason: wallet_exited`.
@@ -36,6 +76,20 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
   OutLayer's to give. `CallRefusal.reason` gains `grant_key_not_purchasable`.
 
 ### Added
+
+- Exact output on `intentsWithdraw` (cross-chain), `intentsSwap`,
+  `confidentialWithdraw`, `confidentialSwap` and their dry-runs and quotes:
+  `amount_out` with `max_amount_in` in place of `amount` / `amount_in`. The
+  recipient receives exactly `amount_out` (1Click `swapType: EXACT_OUTPUT`);
+  the policy, the spending limits and the approvers judge `max_amount_in`, and
+  the limit is charged it; the transfer carries the fresh quote's `amount_in`;
+  a quote above the ceiling is `400 above_max_amount_in` with
+  `quoted_amount_in`; the unused input returns to the wallet after the swap.
+- `min_amount_out` on `intentsWithdraw` (cross-chain) and
+  `confidentialWithdraw`: a floor under an exact input, held to the quote's
+  guaranteed output before anything is signed (`400 below_min_amount_out`).
+- `ErrorCode` gains `memo_not_supported`, `below_min_amount_out`,
+  `above_max_amount_in`; `ErrorResponse` gains the figures the last two carry.
 
 - Webhook signatures a receiver can verify. Every webhook — a wallet's and an
   owner's — is signed with the network's Ed25519 key and carries
