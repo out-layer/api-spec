@@ -8777,7 +8777,8 @@
               "confidential",
               "confidential_deposit",
               "repair",
-              "policy_update"
+              "policy_update",
+              "wallet_contract"
             ]
           }
         }
