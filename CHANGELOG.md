@@ -18,14 +18,17 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
   `POST /wallet/contract/v1/operations`,
   `GET /wallet/contract/v1/operations/{id}` and
   `POST /wallet/contract/v1/operations/{id}/relay` run its operations under
-  the agent's signature (the `AgentAccount`, `AgentTimestamp`, `AgentNonce`
+  the agent's signature, and `GET /wallet/contract/v1/operations` lists
+  those under way (the `AgentAccount`, `AgentTimestamp`, `AgentNonce`
   and `AgentSignature` headers; no bearer token). A request is valid for ten
   minutes. `RequestType` gains `wallet_contract`, the type of an approval
   opened for a wallet contract operation; the error code
   `wallet_contract_refused` (403) says the enclave does not serve the account
   as the wallet's wallet contract. With `use_bound_identity` a wallet that
   has no active binding and has a wallet contract runs as the wallet
-  contract's account. Nothing of the binding routes changes.
+  contract's account. The policy's webhook receives `operation_updated`
+  (`operation_id`, `type`, `status`, `tx_hash`, `reason`) on each change of
+  an operation's status. Nothing of the binding routes changes.
 
 ### Changed
 
