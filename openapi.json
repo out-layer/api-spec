@@ -615,18 +615,17 @@
         }
       }
     },
-    "/wallet/v1/contract/setup/{token}": {
+    "/wallet/v1/contract/setup/owner": {
       "get": {
         "tags": [
           "On-chain custody"
         ],
         "operationId": "getWalletContractSetupForOwner",
         "summary": "What the owner's page installs",
-        "description": "What the holder of a setup token needs to install the wallet contract:\nthe wallet, its owner account, the enclave's key of the wallet's\nwallet contract, the agent's one-time key, and the NEP-413 request\nwhose signature by the owner's own key the agent's key is derived\nfrom. The owner's page at `https://app.outlayer.ai/wallet/custody`\nreads it.\n\nThe token is the only credential: no API key is sent. A token that is\nunknown, has expired or was replaced by a newer setup answers 404.\n",
-        "security": [],
-        "parameters": [
+        "description": "What the holder of a setup token needs to install the wallet contract:\nthe wallet, its owner account, the enclave's key of the wallet's\nwallet contract, the agent's one-time key, and the NEP-413 request\nwhose signature by the owner's own key the agent's key is derived\nfrom. The owner's page at `https://app.outlayer.ai/wallet/custody`\nreads it.\n\nThe token is the only credential, sent as `Authorization: Bearer\n<token>`; no API key is sent. A token that is missing, unknown, has\nexpired or was replaced by a newer setup answers 404.\n",
+        "security": [
           {
-            "$ref": "#/components/parameters/WalletContractSetupToken"
+            "WalletContractSetupToken": []
           }
         ],
         "responses": {
@@ -669,17 +668,16 @@
           }
         }
       },
-      "put": {
+      "post": {
         "tags": [
           "On-chain custody"
         ],
         "operationId": "completeWalletContractSetup",
         "summary": "Name the wallet contract's account and leave the agent's key",
-        "description": "The owner's page names the account the wallet contract is installed on\nand leaves the agent's key for the agent, sealed to\n`recipient_public_key` of the setup.\n\nThe account is recorded exactly as `PUT /wallet/v1/contract` records\nit: its pair of keys is read from the chain (`w_public_key`), and its\nsecond half has to be this wallet's key, so a token gives no way to\npoint the wallet at a contract set up for another wallet. The sealed\nkey is stored as it came and returned to the agent by\n`GET /wallet/v1/contract/setup`.\n\nThe token is the only credential: no API key is sent.\n",
-        "security": [],
-        "parameters": [
+        "description": "The owner's page names the account the wallet contract is installed on\nand leaves the agent's key for the agent, sealed to\n`recipient_public_key` of the setup.\n\nThe account is recorded exactly as `PUT /wallet/v1/contract` records\nit: its pair of keys is read from the chain (`w_public_key`), and its\nsecond half has to be this wallet's key, so a token gives no way to\npoint the wallet at a contract set up for another wallet. The sealed\nkey is stored as it came and returned to the agent by\n`GET /wallet/v1/contract/setup`.\n\nThe token is the only credential, sent as `Authorization: Bearer\n<token>`; no API key is sent.\n",
+        "security": [
           {
-            "$ref": "#/components/parameters/WalletContractSetupToken"
+            "WalletContractSetupToken": []
           }
         ],
         "requestBody": {
@@ -757,7 +755,7 @@
         ],
         "operationId": "askWalletContractOperation",
         "summary": "Ask for an operation of the wallet contract",
-        "description": "The agent asks for an operation under an `id` of its own choice. The\nrequest is signed by the agent's key (see `AgentSignature`); no API key\nis sent. The answer says where the operation stands:\n\n* refused — a 4xx, and no operation exists under the `id`;\n* `pending_approval` — the policy asks for approvers. `approval_id`\n  names the vote, which is read and cast on like any other\n  (`GET /wallet/v1/approval/{id}`, `POST /wallet/v1/approve/{id}`);\n  its type is `wallet_contract`, and it stays open for 24 hours. The\n  policy's `webhook_url` receives `approval_needed` with\n  `operation_id` (this `id`), `approval_id`, `type` and `required`;\n* `awaiting_signature` — the operation is prepared: `message` is the\n  wallet contract's request for it and `tee_half` is the enclave's\n  signature over that request.\n\n**Asking again under the same `id` continues the same operation**, and\nthe body has to be the same operation: another content under a used\n`id` is refused with `409 conflict`. An approval starts nothing. Once\nthe approvers have voted, the agent sends the same request again: an\napproved operation is then prepared, and one whose vote ended any other\nway is `closed` with the reason. For an operation that is past the\npolicy's judgement the answer is where it stands.\n\n**Usage is counted when the request is prepared**, with the answer\nthat hands out `tee_half`, because from that moment the agent holds\neverything it needs to execute the request. It is not given back: not\nwhen the request is never relayed, and not when it fails on chain.\n\n**The agent signs its half last.** Before signing, it checks that\n`message` is the operation it asked for, from its own wallet contract:\nthe receiver, the method, the arguments and the amounts. Then it signs\nits half over the request and sends it to the `relay` route.\n`WalletContract.run` of `@outlayer/sdk` does the check, the signature\nand the relay.\n\nA prepared request that is not relayed within an hour is `closed`: the\nwallet contract accepts a request for an hour from its `created_at_ns`.\nA `closed` operation stays closed; asking for the same thing again\ntakes another `id`.\n\nA swap and a withdrawal to another chain go through 1Click. The request\nsends the input to the deposit address of a quote made for this\noperation, and `quote` carries its figures. The quote waits ten minutes\nfor the input; an input that arrives later is returned by 1Click to the\nwallet contract. The result of a swap arrives in the wallet contract's\nbalance inside NEAR Intents, and so does a refund.\n\nOne operation of a wallet runs at a time, so its limits are counted\ncorrectly (`409 wallet_busy`). A wallet contract operation is not a\nrow under `/wallet/v1/requests`: it is read at\n`GET /wallet/contract/v1/operations/{id}`.\n",
+        "description": "The agent asks for an operation under an `id` of its own choice. The\nrequest is signed by the agent's key (see `AgentSignature`); no API key\nis sent. The answer says where the operation stands:\n\n* refused — a 4xx, and no operation exists under the `id`;\n* `pending_approval` — the policy asks for approvers. `approval_id`\n  names the vote, which is read and cast on like any other\n  (`GET /wallet/v1/approval/{id}`, `POST /wallet/v1/approve/{id}`);\n  its type is `wallet_contract`, and it lives 24 hours: asked again\n  later than that, approved or not, the operation is closed. The\n  policy's `webhook_url` receives `approval_needed` with\n  `operation_id` (this `id`), `approval_id`, `type` and `required`;\n* `awaiting_signature` — the operation is prepared: `message` is the\n  wallet contract's request for it and `tee_half` is the enclave's\n  signature over that request.\n\n**Asking again under the same `id` continues the same operation**, and\nthe body has to be the same operation: another content under a used\n`id` is refused with `409 conflict`. An approval starts nothing. Once\nthe approvers have voted, the agent sends the same request again: an\napproved operation is then prepared, and one whose vote ended any other\nway is `closed` with the reason. For an operation that is past the\npolicy's judgement the answer is where it stands.\n\n**Usage is counted when the request is prepared**, with the answer\nthat hands out `tee_half`, because from that moment the agent holds\neverything it needs to execute the request. It is not given back: not\nwhen the request is never relayed, and not when it fails on chain.\n\n**The agent signs its half last.** Before signing, it checks that\n`message` is the operation it asked for, from its own wallet contract:\nthe receiver, the method, the arguments and the amounts. Then it signs\nits half over the request and sends it to the `relay` route.\n`WalletContract.run` of `@outlayer/sdk` does the check, the signature\nand the relay.\n\nA prepared request that is not relayed within an hour is `closed`: the\nwallet contract accepts a request for an hour from its `created_at_ns`.\nA `closed` operation stays closed; asking for the same thing again\ntakes another `id`.\n\nA swap and a withdrawal to another chain go through 1Click. The request\nsends the input to the deposit address of a quote made for this\noperation, and `quote` carries its figures. The quote waits ten minutes\nfor the input; an input that arrives later is returned by 1Click to the\nwallet contract. The result of a swap arrives in the wallet contract's\nbalance inside NEAR Intents, and so does a refund.\n\nOne operation of a wallet runs at a time, so its limits are counted\ncorrectly (`409 wallet_busy`). A wallet contract operation is not a\nrow under `/wallet/v1/requests`: it is read at\n`GET /wallet/contract/v1/operations/{id}`.\n",
         "security": [
           {
             "AgentAccount": [],
@@ -6967,6 +6965,12 @@
         "bearerFormat": "wk_<32-hex-chars>",
         "description": "API key returned by `POST /register`. Format `wk_<hex>`. Pass as\n`Authorization: Bearer wk_...`. Every route that takes it also takes a\ndeterministic wallet's `Bearer near:<base64url>` token (see\n`POST /register` and `authSign`).\n"
       },
+      "WalletContractSetupToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "<64-hex-chars>",
+        "description": "The token of a wallet contract's setup, as\n`POST /wallet/v1/contract/setup` returned it. The owner's page sends\nit as `Authorization: Bearer <token>`. It is never part of a URL.\n"
+      },
       "OwnerSession": {
         "type": "http",
         "scheme": "bearer",
@@ -7034,16 +7038,6 @@
           "maximum": 80
         },
         "description": "How many seconds after the request arrives this call waits for the\noperation to settle before it answers `status: processing` with\n`request_id` and `poll_url` (`createPaymentCheck`: `status: creating`\nwith the check's `poll_url`). Whole seconds, `0` to `80`; `0` answers as\nsoon as the funds are handed over. Absent, the call waits its own\nbudget: up to 80 s, and the relay's 60 s on a same-chain transfer or\nwithdraw. The wait only shortens: the operation itself runs to its\noutcome and settles the request whatever the client waited. Two things\nit does not cut: the hand-over itself (one relay publish, up to 30 s),\nand in `batchCreatePaymentChecks` the hand-over of every check, which\nthe wait follows. A value outside the range is refused\n`400 bad_request` before anything runs, and reserves nothing. Set it a\nfew seconds below your client's timeout, so a slow settlement answers\nwith an id to poll instead of a dropped connection. The header is read\non every wallet route: it acts on the operations that wait (the ones\nthat list it), and is accepted and changes nothing elsewhere.\n"
-      },
-      "WalletContractSetupToken": {
-        "name": "token",
-        "in": "path",
-        "required": true,
-        "description": "The token of a setup, as `POST /wallet/v1/contract/setup` returned it.",
-        "schema": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        }
       },
       "WalletContractOperationId": {
         "name": "id",
