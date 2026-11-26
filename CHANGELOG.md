@@ -8,7 +8,12 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 - **Breaking.** Agent On-chain custody replaces the binding routes. Added:
   `GET /wallet/v1/contract/key`, `PUT /wallet/v1/contract` and
-  `GET /wallet/v1/contract`, which name a wallet's wallet contract, and
+  `GET /wallet/v1/contract`, which name a wallet's wallet contract;
+  `POST /wallet/v1/contract/setup` and `GET /wallet/v1/contract/setup`, by
+  which the agent opens a setup and collects its key, with
+  `GET /wallet/v1/contract/setup/owner` and
+  `POST /wallet/v1/contract/setup/owner` for the owner's page under the
+  one-time `WalletContractSetupToken` (`Authorization: Bearer`); and
   `POST /wallet/contract/v1/operations`,
   `GET /wallet/contract/v1/operations/{id}` and
   `POST /wallet/contract/v1/operations/{id}/relay`, which run its operations

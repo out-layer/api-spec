@@ -406,7 +406,7 @@
         ],
         "operationId": "putWalletContract",
         "summary": "Name the account that is this wallet's wallet contract",
-        "description": "Records `account_id` as the wallet contract of this wallet. The\naccount's pair of keys is read from the chain (`w_public_key`), and its\nsecond half has to be this wallet's key from\n`GET /wallet/v1/contract/key`: an account set up for another wallet is\nrefused. The first half is recorded as the agent's key, the key the\noperation routes verify requests against.\n\nA wallet has one wallet contract. Naming an account again reads its\npair again, which is how a changed agent key on the same account is\ntaken up; naming another account points the wallet at that one.\n\nThe record is what requests are routed by. That the account is this\nwallet's wallet contract is checked in the enclave, from the chain, on\nevery operation.\n",
+        "description": "Records `account_id` as the wallet contract of this wallet. The\naccount's pair of keys is read from the chain (`w_public_key`), and its\nsecond half has to be this wallet's key from\n`GET /wallet/v1/contract/key`: an account set up for another wallet is\nrefused. The first half is recorded as the agent's key, the key the\noperation routes verify requests against.\n\nA wallet has one wallet contract. Naming an account again reads its\npair again; naming another account points the wallet at that one. A\nwallet contract's pair is set once, when it is installed.\n\nThe record is what requests are routed by. That the account is this\nwallet's wallet contract is checked in the enclave, from the chain, on\nevery operation.\n",
         "requestBody": {
           "required": true,
           "content": {
@@ -447,6 +447,16 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "`conflict`: the account is the wallet contract of another wallet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "422": {
             "description": "`chain_refused`: the chain answered about the account instead of with a value — no such account, no contract on it, or no `w_public_key` method. Not retried.",
@@ -710,7 +720,7 @@
             }
           },
           "400": {
-            "description": "`bad_request`: `sealed_agent_key` is not base64 of at most 128 characters; `account_id` is not a NEAR account id; the account does not answer `w_public_key` with a pair of keys (the two-key wallet contract is not installed on it); or the pair's second half is not this wallet's key.",
+            "description": "`bad_request`: `sealed_agent_key` is not base64 of at most 128 characters; `account_id` is not a NEAR account id, or is neither the owner's account nor a sub-account of it; the account does not answer `w_public_key` with a pair of keys (the two-key wallet contract is not installed on it); or the pair's second half is not this wallet's key.",
             "content": {
               "application/json": {
                 "schema": {
@@ -721,6 +731,16 @@
           },
           "404": {
             "description": "`request_not_found`: the token opens no setup: it is unknown, has expired, or was replaced by a newer one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the account is the wallet contract of another wallet.",
             "content": {
               "application/json": {
                 "schema": {
@@ -9220,7 +9240,7 @@
           {
             "type": "object",
             "title": "call",
-            "description": "A function call from the wallet contract's account. A call to a NEAR Intents contract or to the keystore DAO contract, and a call of a method whose name starts with `w_execute_`, are refused.",
+            "description": "A function call from the wallet contract's account. A call to a NEAR Intents contract, to the keystore DAO contract or to the OutLayer contract, and a call of a method whose name starts with `w_execute_`, are refused.",
             "required": [
               "kind",
               "to",
@@ -9408,7 +9428,7 @@
               "failed",
               "closed"
             ],
-            "description": "* `pending_approval` — the policy asks for approvers;\n  `approval_id` names the vote. The agent asks again under the\n  same `id` once they have voted.\n* `awaiting_signature` — prepared and counted: `message` and\n  `tee_half` are present. The agent signs its half and relays.\n* `relayed` — the transaction `tx_hash` was sent and its outcome\n  is not recorded yet.\n* `success`, `failed` — the outcome on chain. For a swap or a\n  withdrawal to another chain, `success` says the input reached\n  1Click's deposit address; `route_status` follows the route.\n* `closed` — ended with nothing sent, for `reason`: the vote did\n  not end in approval, or a prepared request was not relayed\n  within an hour.\n"
+            "description": "* `pending_approval` — the policy asks for approvers;\n  `approval_id` names the vote. The agent asks again under the\n  same `id` once they have voted.\n* `awaiting_signature` — prepared and counted: `message` and\n  `tee_half` are present. The agent signs its half and relays.\n* `relayed` — the transaction `tx_hash` was sent and its outcome\n  is not recorded yet.\n* `success`, `failed` — the outcome on chain. For a swap or a\n  withdrawal to another chain, `success` says the input reached\n  1Click's deposit address; `route_status` follows the route.\n* `closed` — ended with nothing sent, for `reason`: the vote was\n  rejected or expired, an approval was not used within its 24\n  hours, or a prepared request was not relayed within an hour.\n"
           },
           "request_hash": {
             "type": "string",
