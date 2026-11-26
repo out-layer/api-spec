@@ -29,7 +29,9 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
   `w_execute_extension` is refused for every wallet, `403 policy_denied`.
   `use_bound_identity` runs a program as the account of the caller's wallet
   contract, and `409 no_bound_identity` is the answer when the wallet has
-  none. `RequestType` gains `wallet_contract`, the type of an approval opened
+  none. A wallet contract's request is valid for ten minutes. The error code
+  `wallet_contract_refused` (403) is new: the enclave does not serve the
+  account as the wallet's wallet contract. `RequestType` gains `wallet_contract`, the type of an approval opened
   for a wallet contract operation.
 - **Breaking.** A withdrawal that carries `memo` is refused,
   `400 memo_not_supported` (`intentsWithdraw`, `confidentialWithdraw` and
