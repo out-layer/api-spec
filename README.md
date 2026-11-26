@@ -14,6 +14,7 @@ This repo is the **single source of truth** for the OutLayer wire format. The Ty
 | Area | Status | Notes |
 |---|---|---|
 | Wallet (custody, multi-chain) | ✅ v0.1 | Address, balance, transfer, withdraw, swap, sign-message, EVM signing (EIP-712 / EIP-191 / raw tx) |
+| On-chain custody (wallet contract) | ✅ v0.1 | Name a wallet's wallet contract; ask for, read and relay its operations under the agent's signature |
 | Policy (limits, allowlists, freeze) | ✅ v0.1 | Encrypt → sign → on-chain store flow |
 | Multisig approvals (NEP-413) | ✅ v0.1 | listPending, approve, reject |
 | Audit log | ✅ v0.1 | Full event history |

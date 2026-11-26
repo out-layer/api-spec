@@ -6,6 +6,26 @@ All notable changes to the OutLayer API spec. The format follows [Keep a Changel
 
 ### Changed
 
+- **Breaking.** Agent On-chain custody replaces the binding routes. Added:
+  `GET /wallet/v1/contract/key`, `PUT /wallet/v1/contract` and
+  `GET /wallet/v1/contract`, which name a wallet's wallet contract, and
+  `POST /wallet/contract/v1/operations`,
+  `GET /wallet/contract/v1/operations/{id}` and
+  `POST /wallet/contract/v1/operations/{id}/relay`, which run its operations
+  under the agent's signature (the `AgentAccount`, `AgentTimestamp`,
+  `AgentNonce` and `AgentSignature` headers; no bearer token). Removed:
+  `/wallet/v1/binding` and everything under it, with `PutBindingRequest`,
+  `BindingResponse`, `BindingSetupResponse`, `DeleteBindingResponse` and
+  `AgentConnectDeniedResponse`; `asset_account_id`, `executor_account_id` and
+  `gas_balance` of `AddressResponse`; the `account` parameter and field of
+  `getBalance`; `decoded_effects` of an approval; `promises` in a call's
+  `result`; the request statuses `partially_failed` and `cancelled`; the
+  error codes `agent_connect_denied` and `binding_not_found`. A `call` of
+  `w_execute_extension` is refused for every wallet, `403 policy_denied`.
+  `use_bound_identity` runs a program as the account of the caller's wallet
+  contract, and `409 no_bound_identity` is the answer when the wallet has
+  none. `RequestType` gains `wallet_contract`, the type of an approval opened
+  for a wallet contract operation.
 - **Breaking.** A withdrawal that carries `memo` is refused,
   `400 memo_not_supported` (`intentsWithdraw`, `confidentialWithdraw` and
   their dry-runs, where it is the `reason`). No route delivers a memo or a
