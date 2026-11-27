@@ -7050,7 +7050,7 @@
         ],
         "operationId": "getWalletContractSetupForOwner",
         "summary": "What the owner's page installs",
-        "description": "What the holder of a setup token needs to install the wallet contract:\nthe wallet, its owner account, the enclave's key of the wallet's\nwallet contract, the agent's one-time key, and the NEP-413 request\nwhose signature by the owner's own key the agent's key is derived\nfrom. The owner's page at `https://app.outlayer.ai/wallet/custody`\nreads it.\n\nThe token is the only credential, sent as `Authorization: Bearer\n<token>`; no API key is sent. A token that is missing, unknown, has\nexpired or was replaced by a newer setup answers 404.\n",
+        "description": "What the holder of a setup token needs to install the wallet contract:\nthe wallet, its owner account, the enclave's key of the wallet's\nwallet contract, the agent's one-time key, and the NEP-413 request\nwhose signature by the owner's own key the agent's key is derived\nfrom. The owner's page at `https://app.outlayer.ai/wallet/custody`\nreads it.\n\nA wallet that has a wallet contract already names it in\n`current_contract`: its setup hands the same agent key over again, to\nan agent on a new machine for instance. The owner's signature has to\nbe made by the key that made that agent key; the page refuses another\nkey's signature before it sends anything.\n\nThe token is the only credential, sent as `Authorization: Bearer\n<token>`; no API key is sent. A token that is missing, unknown, has\nexpired or was replaced by a newer setup answers 404.\n",
         "security": [
           {
             "WalletContractSetupToken": []
@@ -7073,7 +7073,8 @@
                     "message": "This signature is the key of your OutLayer agent. Sign it only on app.outlayer.ai, when you set up or recover an agent.\nOwner: alice.near\nWallet: 9c3c9e10-1c1f-4f5e-9c4a-1d7b9a8f3c20",
                     "recipient": "outlayer-agent-key",
                     "nonce_base64": "b3V0bGF5ZXIvYWdlbnQta2V5L3YxL25vbmNlAAAAAAA="
-                  }
+                  },
+                  "current_contract": null
                 }
               }
             }
@@ -13490,7 +13491,8 @@
           "owner",
           "tee_public_key",
           "recipient_public_key",
-          "agent_key_request"
+          "agent_key_request",
+          "current_contract"
         ],
         "properties": {
           "wallet_id": {
@@ -13533,6 +13535,17 @@
                 "description": "The NEP-413 nonce, 32 bytes in base64. It is fixed, so the same request gives the same signature."
               }
             }
+          },
+          "current_contract": {
+            "description": "The wallet contract the wallet has already, or null. Its `agent_public_key` is the key the owner's signature has to make: a signature of another key of the owner makes another agent key, and the funds in this contract do not follow it.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WalletContractResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
