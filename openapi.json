@@ -8074,6 +8074,16 @@
             "default": false,
             "description": "Agent Connect: run under the BOUND asset account's name, so the\nguest's `NEAR_SENDER_ID` becomes e.g. `agent.tla` instead of the\nwallet's own account. A wallet with no active binding and with a\nwallet contract (On-chain custody) runs as the wallet contract's\naccount. near-email turns that into the mailbox it\nsends from, and other connectors derive keys and state from it.\n\nOpt-in, and off by default on purpose. A binding is a capability\nthe agent gains, not a change to who it already is — renaming the\nguest the moment one activated would move every derived identity\nwith nothing in your code to point at.\n\nRequires an ACTIVE binding, and says so rather than falling back:\nwith no binding — or with one still pending, or revoked — the call\nis refused `409 no_bound_identity` before it is priced or charged.\nThe worker then re-verifies the claim against the chain inside the\nTEE and refuses the job if the chain disagrees. Billing never\nfollows the name: `NEAR_USER_ACCOUNT_ID` stays the paying key's\nowner.\n"
           },
+          "response_format": {
+            "type": "string",
+            "enum": [
+              "Json",
+              "Text",
+              "Bytes"
+            ],
+            "default": "Json",
+            "description": "How the program's stdout comes back in `output`. `Json` parses it\nas JSON, and a run whose stdout is not JSON ends `failed` with\n`Failed to parse output as JSON`. `Text` returns it as a string.\n`Bytes` returns it base64-encoded, as a string. The same three\nformats `request_execution` takes on chain. The run that carries\nout a task the owner approved answers in JSON.\n"
+          },
           "secrets_ref": {
             "type": "object",
             "description": "The stored secret this run reads: the row `account_id` stored for\nthis project under `profile`, decrypted inside the TEE only if the\nrow's on-chain access condition admits the paying key's owner. On a\nconnector project a body reference is used as it is; without one,\n`X-Use-Owner-Secret` names the wallet's own row.\nOn a trading connector (`hyperliquid`, `polymarket`) of a wallet\nthat has an owner, the policy is the OWNER's: with no reference the\nowner's row `{owner, <connector>}` is attached, a row of the owner's\nis kept, and any other account's is refused with\n`403 policy_row_not_owner`; doing that repeatedly answers\n`403 calls_suspended` to the wallet's calls for a while\n(`terminal: false` — the same call succeeds once it ends). A row\nthe call names under a profile other than the connector's own that\nis not stored is refused in the run's result (`policy_row_missing`),\nnever run with no policy. A profile per wallet caps that wallet only\nwhile `{owner, <connector>}` exists too: a call that names no row\nruns that one, and with none stored, the connector's built-in\ndefault.\nRefused with `invalid_secrets_ref` (400) when `account_id` is not a\nNEAR account id or `profile` is not 1–64 bytes or holds an ASCII\ncharacter other than a letter, digit, `-` or `_`: the contract\nstores no such row, so nothing is queued for it. A body whose\nfields are not strings is rejected as a body-shape error (422)\nbefore this check.\n",
