@@ -6130,6 +6130,17 @@ components:
             TEE and refuses the job if the chain disagrees. Billing never
             follows the name: `NEAR_USER_ACCOUNT_ID` stays the paying key's
             owner.
+        response_format:
+          type: string
+          enum: [Json, Text, Bytes]
+          default: Json
+          description: |
+            How the program's stdout comes back in `output`. `Json` parses it
+            as JSON, and a run whose stdout is not JSON ends `failed` with
+            `Failed to parse output as JSON`. `Text` returns it as a string.
+            `Bytes` returns it base64-encoded, as a string. The same three
+            formats `request_execution` takes on chain. The run that carries
+            out a task the owner approved answers in JSON.
         secrets_ref:
           type: object
           description: |
